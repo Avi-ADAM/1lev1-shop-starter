@@ -5,7 +5,7 @@
   "type": "module",
   "description": "A ready storefront for a 1lev1 rikma: catalog, variant picker, cart, Stripe Checkout, and the paid order reported from the server.",
   "scripts": {
-    "dev": "vite dev",
+    "dev": "vite dev --port 1111",
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
