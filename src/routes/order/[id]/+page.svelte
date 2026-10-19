@@ -59,7 +59,7 @@
   </section>
 {:else}
   <section class="done">
-    <h1>{data.state === 'unknown' ? t.orderUnknown : t.orderUnpaid}</h1>
+    <h1>{data.state === 'unknown' ? t.orderUnknown : data.state === 'pending' ? t.orderPending : t.orderUnpaid}</h1>
     <a class="btn" href="/cart">{t.backToCart}</a>
   </section>
 {/if}

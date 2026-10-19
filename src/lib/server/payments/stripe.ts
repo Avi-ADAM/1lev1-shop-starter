@@ -253,6 +253,8 @@ export function stripeAdapter(cfg: {
   return {
     name: 'stripe',
 
+    ownsPaymentId: (id) => /^cs_[A-Za-z0-9_]+$/.test(id),
+
     async createCheckout(input) {
       const session = await stripe('/checkout/sessions', {
         method: 'POST',

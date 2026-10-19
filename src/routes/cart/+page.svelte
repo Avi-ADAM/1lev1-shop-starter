@@ -1,12 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { page } from '$app/state';
   import { cart } from '$lib/cart.svelte';
   import { fill, money, t } from '$lib/texts';
   import type { CartProblem, PricedCart } from '$lib/server/cart';
 
+  let { data } = $props();
+
+  // Back from a provider without paying (`?payment=failed|shipping`).
+  const returned = page.url.searchParams.get('payment');
+
   let priced = $state<PricedCart | null>(null);
   let loading = $state(true);
-  let paying = $state(false);
+  let paying = $state<string | null>(null);
   let failed = $state(false);
   let changed = $state(false);
   let delivery = $state<string>('');
@@ -57,9 +63,9 @@
     reprice();
   }
 
-  async function pay() {
+  async function pay(provider: string) {
     if (!priced || paying) return;
-    paying = true;
+    paying = provider;
     failed = false;
     try {
       const res = await fetch('/api/checkout', {
@@ -69,6 +75,7 @@
           items: cart.items,
           delivery: choice?.kind,
           note,
+          provider,
           expectedSubtotal: priced.subtotal
         })
       });
@@ -86,7 +93,7 @@
     } catch {
       failed = true;
     }
-    paying = false;
+    paying = null;
   }
 
   function problemText(p: CartProblem): string {
@@ -103,6 +110,11 @@
 <h1>{t.cart}</h1>
 
 {#if changed}<p class="notice warn" role="status">{t.cartChanged}</p>{/if}
+{#if returned === 'shipping'}
+  <p class="notice warn" role="status">{t.shippingRefused}</p>
+{:else if returned === 'failed'}
+  <p class="notice warn" role="status">{t.paymentFailed}</p>
+{/if}
 {#if priced?.problems.length}
   <ul class="problems" role="status">
     {#each priced.problems as p, i (i)}<li class="warn">{problemText(p)}</li>{/each}
@@ -180,9 +192,16 @@
           <div class="sum"><dt>{t.total}</dt><dd>{money(total, priced.currency)}</dd></div>
         </dl>
 
-        <button class="btn pay" type="button" disabled={paying || loading} onclick={pay}>
-          {paying ? t.paying : t.pay}
-        </button>
+        {#each data.providers as provider (provider)}
+          <button
+            class="btn pay {provider}"
+            type="button"
+            disabled={!!paying || loading}
+            onclick={() => pay(provider)}
+          >
+            {paying === provider ? t.paying : data.providers.length > 1 ? t.payWith[provider] : t.pay}
+          </button>
+        {/each}
         {#if failed}<p class="danger" role="alert">{t.checkoutFailed}</p>{/if}
       </aside>
     {/if}
@@ -344,5 +363,12 @@
   }
   .pay {
     width: 100%;
+  }
+  .pay + .pay {
+    margin-top: 8px;
+  }
+  .pay.paypal {
+    background: #ffc439;
+    color: #111;
   }
 </style>

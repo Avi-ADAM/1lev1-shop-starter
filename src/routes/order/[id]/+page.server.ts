@@ -1,6 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { getOrder, levConfig, orderRefOf } from '$lib/server/lev';
-import { payments } from '$lib/server/payments';
+import { paymentsFor } from '$lib/server/payments';
 import { rikmaOf } from '$lib/server/shop';
 import type { OrderView } from '$lib/types';
 
@@ -12,7 +12,10 @@ import type { OrderView } from '$lib/types';
  */
 export const load: PageServerLoad = async ({ params, setHeaders }) => {
   setHeaders({ 'cache-control': 'no-store' });
-  const payment = await payments().lookupPayment(params.id);
+  const adapter = paymentsFor(params.id);
+  const payment = adapter
+    ? await adapter.lookupPayment(params.id)
+    : { state: 'unknown' as const, externalId: null };
   if (payment.state !== 'paid' || !payment.externalId) {
     return { state: payment.state, order: null as OrderView | null };
   }

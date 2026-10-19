@@ -50,6 +50,12 @@ const he = {
   pay: 'למעבר לתשלום',
   paying: 'מעבירים לתשלום…',
   checkoutFailed: 'לא הצלחנו לפתוח את דף התשלום. נסו שוב בעוד רגע.',
+  payWith: {
+    stripe: 'תשלום בכרטיס אשראי',
+    paypal: 'תשלום ב־PayPal'
+  } as Record<string, string>,
+  paymentFailed: 'התשלום לא הושלם ולא חויבתם. העגלה שלכם עדיין שמורה — נסו שוב.',
+  shippingRefused: 'אנחנו לא שולחים לכתובת שנבחרה ב־PayPal, ולא חויבתם. בחרו כתובת אחרת או אפשרות אספקה אחרת.',
   cartChanged: 'העגלה עודכנה לפי המלאי והמחירים העדכניים — בדקו לפני התשלום.',
   problems: {
     gone: 'מוצר שהיה בעגלה כבר לא זמין, והוסר.',
@@ -63,6 +69,7 @@ const he = {
   orderNumber: 'מספר הזמנה: {{number}}',
   orderRecording: 'התשלום עבר. אנחנו רושמים את ההזמנה — זה לוקח כמה שניות.',
   orderUnpaid: 'התשלום לא הושלם. העגלה שלכם עדיין שמורה.',
+  orderPending: 'התשלום בבדיקה אצל ספק התשלום. ההזמנה תירשם כשיאושר.',
   orderUnknown: 'לא מצאנו את ההזמנה הזו.',
   backToCart: 'חזרה לעגלה',
   orderStatus: {
@@ -123,6 +130,12 @@ const en: Texts = {
   pay: 'Continue to payment',
   paying: 'Opening the payment page…',
   checkoutFailed: 'The payment page could not be opened. Please try again in a moment.',
+  payWith: {
+    stripe: 'Pay by card',
+    paypal: 'Pay with PayPal'
+  } as Record<string, string>,
+  paymentFailed: 'The payment was not completed and you were not charged. Your cart is still saved — please try again.',
+  shippingRefused: 'We do not ship to the address chosen in PayPal, and you were not charged. Pick another address or delivery option.',
   cartChanged: 'Your cart was updated to current stock and prices — please review it.',
   problems: {
     gone: 'An item in your cart is no longer available and was removed.',
@@ -136,6 +149,7 @@ const en: Texts = {
   orderNumber: 'Order number: {{number}}',
   orderRecording: 'Your payment went through. We are recording the order — this takes a few seconds.',
   orderUnpaid: 'The payment was not completed. Your cart is still saved.',
+  orderPending: 'Your payment is being reviewed by the payment provider. The order is recorded once it clears.',
   orderUnknown: 'We could not find this order.',
   backToCart: 'Back to cart',
   orderStatus: {

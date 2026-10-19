@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getProduct, levConfig } from '$lib/server/lev';
 import { priceCart } from '$lib/server/cart';
-import { payments, siteUrlOf } from '$lib/server/payments';
+import { payments, providerNames, siteUrlOf } from '$lib/server/payments';
 import { newDisplayNumber } from '$lib/server/shop';
 import { LANG, t } from '$lib/texts';
 
@@ -14,6 +14,11 @@ import { LANG, t } from '$lib/texts';
  */
 export const POST: RequestHandler = async ({ request, url }) => {
   const body = await request.json().catch(() => ({}));
+  const offered = providerNames();
+  const provider = typeof body?.provider === 'string' ? body.provider : offered[0];
+  if (!provider || !(offered as string[]).includes(provider)) {
+    return json({ ok: false, reason: 'provider' }, { status: 400 });
+  }
   const cfg = levConfig();
   const priced = await priceCart(body?.items, (id) => getProduct(cfg, id));
 
@@ -27,7 +32,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
   const note = typeof body?.note === 'string' ? body.note.trim().slice(0, 500) || null : null;
 
   try {
-    const { redirectUrl } = await payments().createCheckout({
+    const { redirectUrl } = await payments(provider).createCheckout({
       lines: priced.lines,
       currency: priced.currency,
       delivery,
