@@ -17,5 +17,5 @@
 # 1lev1 and use its Netlify button — it fills in the rikma address (and the
 # key, right after you create it) and asks for the payment provider you pick.
 [template.environment]
-  LEV_RIKMA_URL = "The rikma's API address, e.g. https://www.1lev1.com/api/v1/r/<your rikma>"
+  LEV_RIKMA_URL = "The rikma's API address, e.g. https://api.1lev1.com/api/v1/r/<your rikma>"
   LEV_ORDERS_KEY = "A key with orders:create + orders:read, from the rikma's Connections page"

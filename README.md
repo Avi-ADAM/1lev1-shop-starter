@@ -76,7 +76,7 @@ reason.
 
    | Variable | |
    |---|---|
-   | `LEV_RIKMA_URL` | `https://www.1lev1.com/api/v1/r/<your rikma>` |
+   | `LEV_RIKMA_URL` | `https://api.1lev1.com/api/v1/r/<your rikma>` |
    | `LEV_ORDERS_KEY` | the key from step 1 |
    | `STRIPE_SECRET_KEY` | `sk_live_…` (or `sk_test_…` to try it) |
    | `STRIPE_WEBHOOK_SECRET` | `whsec_…` from step 2 |
