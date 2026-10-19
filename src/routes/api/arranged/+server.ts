@@ -39,8 +39,14 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 
   const seen = Number(body?.expectedSubtotal);
   const moved = priced.problems.length > 0 || (Number.isFinite(seen) && seen !== priced.subtotal);
-  if (moved || priced.lines.length === 0 || !priced.currency) {
+  if (moved || priced.lines.length === 0) {
     return json({ ok: false, reason: 'changed', cart: priced }, { status: 409 });
+  }
+  // Not the buyer's doing, and nothing they can fix by reviewing the cart:
+  // the catalog sent prices without a currency.
+  if (!priced.currency) {
+    console.error('[shop] arranged order refused: the catalog gave these products no currency');
+    return json({ ok: false, reason: 'currency' }, { status: 502 });
   }
   const delivery = priced.delivery.find((d) => d.kind === body?.delivery) ?? priced.delivery[0];
 

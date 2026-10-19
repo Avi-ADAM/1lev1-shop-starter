@@ -128,6 +128,8 @@
       if (res.status === 409 && body?.cart) {
         take(body.cart);
         changed = true;
+        // The notice at the top is out of sight from here; say it by the button.
+        arrangedError = t.cartChanged;
       } else if (res.status === 400 && body?.reason === 'invalid') {
         badFields = body.fields ?? [];
         arrangedError = t.arrangedInvalid;
