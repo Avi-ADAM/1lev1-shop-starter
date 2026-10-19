@@ -1,5 +1,6 @@
 import type { OrderReport } from '$lib/types';
 import type { DeliveryChoice, PricedLine } from '$lib/server/cart';
+import type { BuyerAddress } from '$lib/address';
 
 /**
  * A payment provider, as this shop needs it. Stripe (`stripe.ts`) and PayPal
@@ -13,6 +14,8 @@ export interface CheckoutInput {
   delivery: DeliveryChoice;
   /** What the delivery fee line is called on the payment page. */
   deliveryLabel: string;
+  /** Collected on the cart page for a parcel (it set the price); null otherwise. */
+  address: BuyerAddress | null;
   /** The number the buyer is told — also how the rikma finds the order. */
   displayNumber: string;
   note: string | null;

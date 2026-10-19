@@ -107,13 +107,13 @@ describe('deliveryChoicesOf', () => {
       product({ delivery: [ship(40)] }),
       product({ delivery: [] })
     ]);
-    expect(res).toEqual([{ kind: 'delivery', fee: 40, notes: [] }]);
+    expect(res).toEqual([{ id: 'delivery', kind: 'delivery', fee: 40, notes: [] }]);
   });
 
   it('falls back to contact when nothing is shared', () => {
-    expect(deliveryChoicesOf([product()])).toEqual([{ kind: 'contact', fee: 0, notes: [] }]);
+    expect(deliveryChoicesOf([product()])).toEqual([{ id: 'contact', kind: 'contact', fee: 0, notes: [] }]);
     expect(deliveryChoicesOf([product({ delivery: [pickup] }), product({ delivery: [ship(10)] })])).toEqual([
-      { kind: 'contact', fee: 0, notes: [] }
+      { id: 'contact', kind: 'contact', fee: 0, notes: [] }
     ]);
   });
 });

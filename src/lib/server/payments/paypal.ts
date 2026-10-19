@@ -1,4 +1,5 @@
 import type { OrderReport } from '$lib/types';
+import { streetLine, type BuyerAddress } from '$lib/address';
 import type { CheckoutInput, PaymentAdapter, PaymentState, ReturnOutcome, WebhookOutcome } from './types';
 
 /**
@@ -56,6 +57,22 @@ export function idsOfSku(sku: unknown): { productId: string; variantId?: string 
   return variantId ? { productId, variantId } : { productId };
 }
 
+/** Apartment, floor and entrance ride on the second address line. */
+export function shippingOf(a: BuyerAddress) {
+  const line2 = [a.apartment && `apt ${a.apartment}`, a.floor && `floor ${a.floor}`, a.entrance && `entrance ${a.entrance}`]
+    .filter(Boolean)
+    .join(', ');
+  return {
+    address: {
+      address_line_1: cut(streetLine(a), 300),
+      ...(line2 ? { address_line_2: cut(line2, 300) } : {}),
+      admin_area_2: cut(a.city, 120),
+      ...(a.zip ? { postal_code: cut(a.zip, 60) } : {}),
+      country_code: a.country || 'IL'
+    }
+  };
+}
+
 export function orderParams(input: CheckoutInput) {
   const currency = input.currency.toUpperCase();
   const items = input.lines.map((l) => ({
@@ -77,8 +94,15 @@ export function orderParams(input: CheckoutInput) {
         // Shown to the buyer and the seller in PayPal; also how the rikma
         // finds the order.
         invoice_id: input.displayNumber,
-        // `delivery|locale` — read back when the order is reported.
-        custom_id: `${input.delivery.kind}|${input.locale}`,
+        // `delivery|locale|option` — read back when the order is reported
+        // (PayPal keeps 127 characters; an option id is at most 84).
+        custom_id: cut(
+          `${input.delivery.kind}|${input.locale}${input.delivery.id !== input.delivery.kind ? `|${input.delivery.id}` : ''}`,
+          127
+        ),
+        // The address the cart page took (it priced the delivery) — PayPal
+        // shows it instead of asking for one, and hands it back with the order.
+        ...(input.address && input.delivery.kind === 'delivery' ? { shipping: shippingOf(input.address) } : {}),
         // PayPal keeps 127 characters; the note is the buyer's own words.
         ...(input.note ? { description: cut(input.note, 127) } : {}),
         items,
@@ -96,7 +120,8 @@ export function orderParams(input: CheckoutInput) {
       paypal: {
         experience_context: {
           ...(input.locale === 'he' ? { locale: 'he-IL' } : {}),
-          shipping_preference: input.delivery.kind === 'delivery' ? 'GET_FROM_FILE' : 'NO_SHIPPING',
+          shipping_preference:
+            input.delivery.kind !== 'delivery' ? 'NO_SHIPPING' : input.address ? 'SET_PROVIDED_ADDRESS' : 'GET_FROM_FILE',
           user_action: 'PAY_NOW',
           return_url: `${base}/api/payments/paypal/return`,
           cancel_url: `${base}/cart`
@@ -144,7 +169,7 @@ export function orderFromPaypal(order: any): OrderReport {
   }
   const fee = Number(pu?.amount?.breakdown?.shipping?.value ?? 0);
 
-  const [kindRaw, locale] = String(pu?.custom_id ?? '').split('|', 2);
+  const [kindRaw, locale, optionId] = String(pu?.custom_id ?? '').split('|', 3);
   const kind = (DELIVERY_KINDS as readonly string[]).includes(kindRaw)
     ? (kindRaw as (typeof DELIVERY_KINDS)[number])
     : 'contact';
@@ -154,9 +179,10 @@ export function orderFromPaypal(order: any): OrderReport {
   if (addr) {
     if (pu?.shipping?.name?.full_name) address.name = String(pu.shipping.name.full_name);
     for (const [k, v] of Object.entries({
-      street: [addr.address_line_1, addr.address_line_2].filter(Boolean).join(', '),
+      street: addr.address_line_1,
+      notes: addr.address_line_2,
       city: addr.admin_area_2,
-      postalCode: addr.postal_code,
+      zip: addr.postal_code,
       state: addr.admin_area_1,
       country: addr.country_code
     })) {
@@ -183,7 +209,8 @@ export function orderFromPaypal(order: any): OrderReport {
     delivery: {
       preference: kind,
       ...(Object.keys(address).length ? { address } : {}),
-      ...(fee > 0 ? { fee } : {})
+      ...(fee > 0 ? { fee } : {}),
+      ...(optionId ? { optionId } : {})
     },
     lines
   };
@@ -258,8 +285,10 @@ export function paypalAdapter(cfg: {
 
   function shippingAllowed(order: any): boolean {
     const pu = unitOf(order);
-    const [kind] = String(pu?.custom_id ?? '').split('|', 1);
+    const [kind, , optionId] = String(pu?.custom_id ?? '').split('|', 3);
     if (kind !== 'delivery') return true;
+    // An option the rikma's zones priced was already checked against the address.
+    if (optionId) return true;
     const country = String(pu?.shipping?.address?.country_code ?? '').toUpperCase();
     return cfg.shippingCountries.includes(country);
   }

@@ -1,11 +1,14 @@
 import { env } from '$env/dynamic/private';
 import type {
   Category,
+  Locality,
   OrderReport,
   OrderView,
   Product,
   ProductList,
-  Rikma
+  Rikma,
+  ShippingInfo,
+  ShippingQuote
 } from '$lib/types';
 
 /**
@@ -208,4 +211,69 @@ export async function getOrder(cfg: LevConfig, ref: string): Promise<OrderView |
     if (e instanceof LevError && e.status === 404) return null;
     throw e;
   }
+}
+
+// ─── shipping — the rikma's zones and rates, priced by 1lev1 ──────────────
+
+/** `null` when the rikma has not set shipping up (or 1lev1 predates it): products' own options apply. */
+export async function getShipping(cfg: LevConfig): Promise<ShippingInfo | null> {
+  try {
+    const res = await call<{ shipping: ShippingInfo }>(cfg, '/shipping', { key: cfg.readKey });
+    return res?.shipping?.enabled ? res.shipping : null;
+  } catch (e) {
+    if (e instanceof LevError && (e.status === 404 || e.status === 405)) return null;
+    throw e;
+  }
+}
+
+export interface QuoteLine {
+  productId: string;
+  variantId: string | null;
+  quantity: number;
+  unitPrice: number;
+}
+
+/**
+ * Every way this cart can reach this address, priced by the rikma's own
+ * settings. Asked by the cart page as the buyer types, and again right
+ * before payment — the second answer is the one charged.
+ */
+export async function quoteShipping(
+  cfg: LevConfig,
+  lines: QuoteLine[],
+  address: { country: string; city?: string; zip?: string } | null
+): Promise<ShippingQuote> {
+  try {
+    return await call<ShippingQuote>(cfg, '/shipping/quote', {
+      method: 'POST',
+      key: cfg.readKey,
+      body: { lines, ...(address ? { address } : {}) }
+    });
+  } catch (e) {
+    // A 1lev1 that predates shipping answers 404/405: the products' own options apply.
+    if (e instanceof LevError && (e.status === 404 || e.status === 405)) return { configured: false, currency: null };
+    throw e;
+  }
+}
+
+/** `https://api.1lev1.com/api/v1/r/<rikma>` ⇒ `https://api.1lev1.com/api/v1` — places are not a rikma's. */
+export function apiBaseOf(rikmaUrl: string): string {
+  return rikmaUrl.replace(/\/r\/[^/]+\/?$/, '');
+}
+
+export async function listLocalities(cfg: LevConfig): Promise<Locality[]> {
+  const res = await call<{ cities: Locality[] }>({ ...cfg, rikmaUrl: apiBaseOf(cfg.rikmaUrl) }, '/places/cities', {
+    key: cfg.readKey
+  });
+  return res?.cities ?? [];
+}
+
+export async function listStreets(cfg: LevConfig, cityCode: string): Promise<string[]> {
+  if (!/^\d{1,6}$/.test(cityCode)) return [];
+  const res = await call<{ streets: string[] }>(
+    { ...cfg, rikmaUrl: apiBaseOf(cfg.rikmaUrl) },
+    `/places/streets?city=${cityCode}`,
+    { key: cfg.readKey }
+  );
+  return res?.streets ?? [];
 }

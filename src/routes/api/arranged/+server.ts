@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getProduct, levConfig, LevError, reportOrder } from '$lib/server/lev';
 import { priceCart } from '$lib/server/cart';
+import { checkoutDelivery } from '$lib/server/delivery';
 import { newDisplayNumber } from '$lib/server/shop';
 import {
   arrangedChannels,
@@ -48,14 +49,28 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
     console.error('[shop] arranged order refused: the catalog gave these products no currency');
     return json({ ok: false, reason: 'currency' }, { status: 502 });
   }
-  const delivery = priced.delivery.find((d) => d.kind === body?.delivery) ?? priced.delivery[0];
-
-  const check = checkBuyer(body?.buyer, delivery.kind);
+  const check = checkBuyer(body?.buyer);
   if (check.ok === false) {
     // A bot that filled the hidden field learns nothing from the answer.
     if (check.reason === 'spam') return json({ ok: false, reason: 'invalid', fields: [] }, { status: 400 });
     return json({ ok: false, reason: 'invalid', fields: check.fields }, { status: 400 });
   }
+
+  let gate;
+  try {
+    gate = await checkoutDelivery(cfg, priced, body ?? {});
+  } catch (e) {
+    console.error('[shop] arranged order refused: the delivery could not be quoted:', e);
+    return json({ ok: false, reason: 'record' }, { status: 502 });
+  }
+  if (gate.ok === false) {
+    const cart = { ...priced, delivery: gate.state.choices, shipping: gate.state };
+    if (gate.reason === 'address') {
+      return json({ ok: false, reason: 'invalid', fields: gate.fields ?? [], cart }, { status: 400 });
+    }
+    return json({ ok: false, reason: 'changed', cart }, { status: 409 });
+  }
+  const { choice: delivery, address } = gate;
 
   const externalId = newArrangedId();
   const note = typeof body?.note === 'string' ? body.note.trim().slice(0, 500) || null : null;
@@ -67,6 +82,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
         displayNumber: newDisplayNumber(),
         priced,
         delivery,
+        address,
         buyer: check.buyer,
         note,
         locale: LANG,

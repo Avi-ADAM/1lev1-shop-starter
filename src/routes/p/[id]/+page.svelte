@@ -15,6 +15,10 @@
 
   let { data } = $props();
   const product = $derived(data.product);
+  // The rikma prices delivery by zones in 1lev1: the cart quotes it for the address.
+  const shipping = $derived(data.shipping ?? null);
+  const kinds = $derived(new Set(product.delivery.map((d) => d.kind)));
+  const pickupOk = $derived(kinds.size === 0 || kinds.has('pickup'));
 
   let selection = $state<Selection>({});
   let quantity = $state(1);
@@ -174,7 +178,28 @@
       <p class="desc">{product.descriptionText}</p>
     {/if}
 
-    {#if product.delivery.length || product.leadTimeHours}
+    {#if shipping}
+      <section class="delivery">
+        <h2>{t.delivery}</h2>
+        <ul>
+          {#if shipping.freeOver !== null && (kinds.size === 0 || kinds.has('delivery'))}
+            <li><strong>{fill(t.shipFreeOver, { amount: money(shipping.freeOver, shipping.currency ?? currency) })}</strong></li>
+          {/if}
+          {#if pickupOk}
+            {#each shipping.pickupPoints as p (p.id)}
+              <li>
+                <strong>{fill(t.shipPickupAt, { name: p.name })}</strong>
+                {#if p.address || p.city}<span class="muted"> — {[p.address, p.city].filter(Boolean).join(', ')}</span>{/if}
+                {#if p.hours}<span class="muted"> · {p.hours}</span>{/if}
+              </li>
+            {/each}
+          {/if}
+          {#if product.leadTimeHours}
+            <li class="muted">{fill(t.leadTime, { days: Math.max(1, Math.round(product.leadTimeHours / 24)) })}</li>
+          {/if}
+        </ul>
+      </section>
+    {:else if product.delivery.length || product.leadTimeHours}
       <section class="delivery">
         <h2>{t.delivery}</h2>
         <ul>

@@ -1,4 +1,5 @@
 import type { OrderReport } from '$lib/types';
+import { addressForOrder } from '$lib/address';
 import type { CheckoutInput, PaymentAdapter, PaymentState, WebhookOutcome } from './types';
 
 /**
@@ -84,11 +85,17 @@ export function checkoutParams(input: CheckoutInput, opts: { shippingCountries: 
     cancel_url: `${base}/cart`,
     locale: input.locale === 'he' ? 'he' : 'auto',
     phone_number_collection: { enabled: true },
+    // The address was taken on the cart page (it priced the delivery); Stripe
+    // asks for one only when this shop has none — a rikma without zones.
     shipping_address_collection:
-      input.delivery.kind === 'delivery' ? { allowed_countries: opts.shippingCountries } : undefined,
+      input.delivery.kind === 'delivery' && !input.address
+        ? { allowed_countries: opts.shippingCountries }
+        : undefined,
     metadata: {
       displayNumber: input.displayNumber,
       delivery: input.delivery.kind,
+      deliveryOption: input.delivery.id !== input.delivery.kind ? input.delivery.id : undefined,
+      address: input.address ? meta(JSON.stringify(addressForOrder(input.address))) : undefined,
       note: meta(input.note),
       locale: input.locale
     },
@@ -144,6 +151,19 @@ export async function verifyStripeSignature(
 
 const DELIVERY_KINDS = ['pickup', 'delivery', 'digital', 'contact'] as const;
 
+/** The address this shop wrote into the session's metadata — strings only, never trusted further. */
+export function parseAddress(raw: unknown): Record<string, string> | null {
+  if (typeof raw !== 'string' || !raw.startsWith('{')) return null;
+  try {
+    const v = JSON.parse(raw);
+    const out: Record<string, string> = {};
+    for (const [k, x] of Object.entries(v ?? {})) if (typeof x === 'string' && x) out[k.slice(0, 20)] = x.slice(0, 200);
+    return Object.keys(out).length ? out : null;
+  } catch {
+    return null;
+  }
+}
+
 /** The id 1lev1 records the order under: the payment, else the session. */
 export function externalIdOf(session: any): string {
   const pi = session?.payment_intent;
@@ -184,12 +204,14 @@ export function orderFromSession(session: any, lineItems: any[]): OrderReport {
   const shipping = session?.shipping_details ?? session?.collected_information?.shipping_details ?? null;
   const addr = shipping?.address ?? null;
   const address: Record<string, string> = {};
-  if (addr) {
+  const ours = parseAddress(m.address);
+  if (ours) Object.assign(address, ours);
+  else if (addr) {
     if (shipping?.name) address.name = String(shipping.name);
     for (const [k, v] of Object.entries({
       street: [addr.line1, addr.line2].filter(Boolean).join(', '),
       city: addr.city,
-      postalCode: addr.postal_code,
+      zip: addr.postal_code,
       state: addr.state,
       country: addr.country
     })) {
@@ -213,7 +235,8 @@ export function orderFromSession(session: any, lineItems: any[]): OrderReport {
     delivery: {
       preference: kind,
       ...(Object.keys(address).length ? { address } : {}),
-      ...(fee > 0 ? { fee: Math.round(fee * 100) / 100 } : {})
+      ...(fee > 0 ? { fee: Math.round(fee * 100) / 100 } : {}),
+      ...(typeof m.deliveryOption === 'string' && m.deliveryOption ? { optionId: m.deliveryOption } : {})
     },
     lines
   };

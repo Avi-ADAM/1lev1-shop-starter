@@ -85,7 +85,7 @@ reason.
    | `PAYPAL_ENV` | `sandbox` (default) or `live` |
    | `LEV_READ_KEY` | optional — a `products:read` key (drafts, higher rate limit) |
    | `SHOP_SITE_URL` | optional — your domain, for the payment pages' return links |
-   | `SHOP_SHIPPING_COUNTRIES` | optional — `IL` by default |
+   | `SHOP_SHIPPING_COUNTRIES` | optional — `IL` by default; only for a rikma **without** shipping zones (see below) |
    | `ARRANGED_PAYMENT` | optional — `phone,whatsapp` turns on "order now, pay by arrangement" |
    | `SHOP_WHATSAPP` | optional — your WhatsApp number (`972…`), for the thank-you page |
    | `ARRANGED_EXPIRES_HOURS` | optional — when an uncollected order lapses (default 72) |
@@ -127,8 +127,28 @@ buyer ─▶ your shop ─▶ /api/arranged ─▶ POST /orders { payment: "arra
 
 Only products the API marks `checkout: true` — a fixed price, not archived.
 A product sold by quote, or with a pool price, shows a link to request it on
-1lev1 instead. Delivery choices are the ones **every** product in the cart
-offers (as set in the rikma); the fee is the highest of them — one parcel.
+1lev1 instead.
+
+## Shipping
+
+Set it up once in the rikma: **Sales management → Shipping**. Zones by
+country, district (נפה), city or postal code — the first zone that fits the
+address wins — each with its methods (base price, per extra item, per kg,
+tiers, free over an amount, minimum order, delivery days, how long it takes),
+pickup points with hours, and rules for products that are pickup-only,
+digital or bulky.
+
+This shop **never prices delivery itself**. The cart asks 1lev1 for a quote
+(`POST /shipping/quote`) as the buyer types the city, and again right before
+payment — a fee that moved sends the cart back for review, and a parcel with
+no full address is stopped before the payment page. The address (city and
+street completed from Israel's official lists, number, apartment, floor,
+entrance, notes for the courier) goes to Stripe or PayPal as given, and to the
+rikma with the order. Change a rate in 1lev1 and it applies here with no deploy.
+
+A rikma that has not set shipping up keeps the old behaviour: the choices
+are the ones **every** product in the cart offers; the fee is the highest of
+them — one parcel.
 
 ## Make it yours
 

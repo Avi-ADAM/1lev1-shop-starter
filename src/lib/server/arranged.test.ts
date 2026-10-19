@@ -1,3 +1,4 @@
+import { EMPTY_ADDRESS } from '$lib/address';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('$env/dynamic/private', () => ({ env: {} }));
@@ -43,21 +44,13 @@ describe('checkBuyer', () => {
   const ok = { name: 'דנה', phone: '050-1234567' };
 
   it('needs a name and a phone someone can call', () => {
-    expect(checkBuyer(ok, 'pickup')).toMatchObject({ ok: true, buyer: { name: 'דנה', email: null, address: null } });
-    expect(checkBuyer({ name: 'ד', phone: '12' }, 'pickup')).toEqual({ ok: false, reason: 'invalid', fields: ['name', 'phone'] });
-    expect(checkBuyer({ ...ok, email: 'nope' }, 'pickup')).toMatchObject({ fields: ['email'] });
-  });
-
-  it('a parcel needs an address', () => {
-    expect(checkBuyer(ok, 'delivery')).toMatchObject({ fields: ['address'] });
-    expect(checkBuyer({ ...ok, city: 'נתניה', street: 'הרצל 1' }, 'delivery')).toMatchObject({
-      ok: true,
-      buyer: { address: { city: 'נתניה', street: 'הרצל 1' } }
-    });
+    expect(checkBuyer(ok)).toMatchObject({ ok: true, buyer: { name: 'דנה', email: null } });
+    expect(checkBuyer({ name: 'ד', phone: '12' })).toEqual({ ok: false, reason: 'invalid', fields: ['name', 'phone'] });
+    expect(checkBuyer({ ...ok, email: 'nope' })).toMatchObject({ fields: ['email'] });
   });
 
   it('a filled honeypot is spam', () => {
-    expect(checkBuyer({ ...ok, website: 'http://x' }, 'pickup')).toEqual({ ok: false, reason: 'spam' });
+    expect(checkBuyer({ ...ok, website: 'http://x' })).toEqual({ ok: false, reason: 'spam' });
   });
 });
 
@@ -77,8 +70,9 @@ describe('arrangedReport', () => {
         problems: [],
         delivery: []
       },
-      delivery: { kind: 'delivery', fee: 25, notes: [] },
-      buyer: { name: 'דנה', phone: '0501234567', email: null, address: { city: 'נתניה', street: 'הרצל 1' } },
+      delivery: { id: 'm:center:courier', kind: 'delivery', fee: 25, notes: [] },
+      address: { ...EMPTY_ADDRESS, city: 'נתניה', street: 'הרצל', house: '1', apartment: '4' },
+      buyer: { name: 'דנה', phone: '0501234567', email: null },
       note: null,
       locale: 'he',
       expiresInHours: 24
@@ -90,7 +84,12 @@ describe('arrangedReport', () => {
       displayNumber: 'K7Q4XM',
       currency: 'ILS',
       buyer: { name: 'דנה', phone: '0501234567' },
-      delivery: { preference: 'delivery', address: { city: 'נתניה', street: 'הרצל 1' }, fee: 25 },
+      delivery: {
+        preference: 'delivery',
+        address: { city: 'נתניה', street: 'הרצל', house: '1', apartment: '4' },
+        fee: 25,
+        optionId: 'm:center:courier'
+      },
       locale: 'he',
       lines: [
         { productId: '1', quantity: 2, unitPrice: 40 },

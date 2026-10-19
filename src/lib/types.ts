@@ -147,6 +147,8 @@ export interface OrderReport {
     preference: 'pickup' | 'delivery' | 'digital' | 'contact';
     address?: Record<string, string>;
     fee?: number;
+    /** The rikma's shipping option the buyer chose (`m:<zone>:<method>`, `p:<point>`, …). */
+    optionId?: string;
   };
   note?: string;
   locale?: string;
@@ -158,4 +160,62 @@ export interface CartItem {
   productId: string;
   variantId: string | null;
   quantity: number;
+}
+
+// ─── shipping (the rikma's zones, rates and pickup points) ─────────────────
+
+export interface PickupPoint {
+  id: string;
+  name: string;
+  city: string | null;
+  address: string | null;
+  hours: string | null;
+  note: string | null;
+  fee: number;
+}
+
+/** `GET /shipping` — what can be said before there is an address. */
+export interface ShippingInfo {
+  enabled: boolean;
+  currency: string | null;
+  handlingDays: number | null;
+  /** The lowest "free over" of any method — "free delivery over ₪300". */
+  freeOver: number | null;
+  zones: Array<{ id: string; name: string; countries: string[]; everywhere: boolean }>;
+  pickupPoints: PickupPoint[];
+}
+
+/** One way this cart can reach this address, priced by 1lev1. */
+export interface ShippingOption {
+  id: string;
+  kind: 'delivery' | 'pickup' | 'digital' | 'contact';
+  name: string;
+  fee: number;
+  free: boolean;
+  freeOverRemaining: number | null;
+  etaMinDays: number | null;
+  etaMaxDays: number | null;
+  nextDispatch: string | null;
+  note: string | null;
+  zone: { id: string; name: string } | null;
+  pickupPoint: PickupPoint | null;
+}
+
+/** `POST /shipping/quote`. `configured: false` ⇒ the products' own delivery options apply. */
+export interface ShippingQuote {
+  configured: boolean;
+  currency: string | null;
+  options?: ShippingOption[];
+  zone?: { id: string; name: string } | null;
+  needsAddress?: boolean;
+  outsideZones?: boolean;
+  noDeliveryProducts?: string[];
+}
+
+/** A locality from the CBS list, served by 1lev1's `/places/cities`. */
+export interface Locality {
+  code: string;
+  name: string;
+  nameEn: string | null;
+  district: string | null;
 }

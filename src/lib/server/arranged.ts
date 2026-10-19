@@ -1,6 +1,7 @@
 import { env } from '$env/dynamic/private';
 import type { PricedCart, DeliveryChoice } from './cart';
 import type { OrderReport } from '$lib/types';
+import { addressForOrder, type BuyerAddress } from '$lib/address';
 
 /**
  * "Order now, pay by arrangement" — the buyer leaves a name and a phone, the
@@ -62,36 +63,32 @@ export interface ArrangedBuyer {
   name: string;
   phone: string;
   email: string | null;
-  address: { city: string; street: string } | null;
 }
 
 export type BuyerCheck =
   | { ok: true; buyer: ArrangedBuyer }
   | { ok: false; reason: 'spam' }
-  | { ok: false; reason: 'invalid'; fields: Array<'name' | 'phone' | 'email' | 'address'> };
+  | { ok: false; reason: 'invalid'; fields: Array<'name' | 'phone' | 'email'> };
 
 const short = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
 /**
  * The buyer's details from the form. `website` is the honeypot: a field a
  * person never sees, which a form-filling bot fills — such a request is
- * dropped without telling the bot why.
+ * dropped without telling the bot why. The delivery address is checked with
+ * the delivery itself (`checkoutDelivery`), where it also set the price.
  */
-export function checkBuyer(body: any, delivery: DeliveryChoice['kind']): BuyerCheck {
+export function checkBuyer(body: any): BuyerCheck {
   if (short(body?.website, 200)) return { ok: false, reason: 'spam' };
   const name = short(body?.name, 120);
   const phone = short(body?.phone, 40);
   const email = short(body?.email, 200) || null;
-  const city = short(body?.city, 120);
-  const street = short(body?.street, 200);
-  const fields: Array<'name' | 'phone' | 'email' | 'address'> = [];
+  const fields: Array<'name' | 'phone' | 'email'> = [];
   if (name.length < 2) fields.push('name');
   if (phone.replace(/\D+/g, '').length < 9) fields.push('phone');
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fields.push('email');
-  // A parcel needs somewhere to go; the rest is settled on the phone.
-  if (delivery === 'delivery' && (!city || !street)) fields.push('address');
   if (fields.length) return { ok: false, reason: 'invalid', fields };
-  return { ok: true, buyer: { name, phone, email, address: city || street ? { city, street } : null } };
+  return { ok: true, buyer: { name, phone, email } };
 }
 
 /** What `POST /orders` gets for an arranged order — the same lines a paid one would carry. */
@@ -100,12 +97,14 @@ export function arrangedReport(args: {
   displayNumber: string;
   priced: PricedCart;
   delivery: DeliveryChoice;
+  /** For a parcel: the address that priced it. */
+  address: BuyerAddress | null;
   buyer: ArrangedBuyer;
   note: string | null;
   locale: string;
   expiresInHours: number | null;
 }): OrderReport {
-  const { priced, delivery, buyer } = args;
+  const { priced, delivery, buyer, address } = args;
   return {
     externalId: args.externalId,
     payment: 'arranged',
@@ -115,8 +114,9 @@ export function arrangedReport(args: {
     buyer: { name: buyer.name, phone: buyer.phone, ...(buyer.email ? { email: buyer.email } : {}) },
     delivery: {
       preference: delivery.kind,
-      ...(buyer.address ? { address: buyer.address } : {}),
-      ...(delivery.fee > 0 ? { fee: delivery.fee } : {})
+      ...(address ? { address: addressForOrder(address) } : {}),
+      ...(delivery.fee > 0 ? { fee: delivery.fee } : {}),
+      ...(delivery.id !== delivery.kind ? { optionId: delivery.id } : {})
     },
     ...(args.note ? { note: args.note } : {}),
     locale: args.locale,

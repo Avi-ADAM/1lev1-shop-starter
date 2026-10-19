@@ -1,5 +1,5 @@
-import { getRikma, levConfig, type LevConfig } from './lev';
-import type { Rikma } from '$lib/types';
+import { getRikma, getShipping, levConfig, type LevConfig } from './lev';
+import type { Rikma, ShippingInfo } from '$lib/types';
 
 /**
  * The rikma's own details change rarely; one read every few minutes is
@@ -20,4 +20,19 @@ export function newDisplayNumber(): string {
   const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no 0/O, 1/I/L
   const bytes = crypto.getRandomValues(new Uint8Array(6));
   return [...bytes].map((b) => alphabet[b % alphabet.length]).join('');
+}
+
+let shippingCache: { at: number; info: ShippingInfo | null } | null = null;
+
+/** The rikma's shipping summary (pickup points, "free over"), cached like the rikma. */
+export async function shippingOf(cfg: LevConfig = levConfig()): Promise<ShippingInfo | null> {
+  if (shippingCache && Date.now() - shippingCache.at < TTL_MS) return shippingCache.info;
+  try {
+    const info = await getShipping(cfg);
+    shippingCache = { at: Date.now(), info };
+    return info;
+  } catch (e) {
+    console.warn('[shop] shipping summary unavailable:', e);
+    return shippingCache?.info ?? null;
+  }
 }

@@ -74,6 +74,7 @@ describe('checkoutParams', () => {
   const base = {
     currency: 'ILS',
     deliveryLabel: 'Shipping',
+    address: null,
     displayNumber: 'K7Q4XM',
     note: 'no plastic',
     locale: 'he',
@@ -82,7 +83,7 @@ describe('checkoutParams', () => {
 
   it('carries the 1lev1 ids on each line and the fee as its own line', () => {
     const p: any = checkoutParams(
-      { ...base, lines: [line()], delivery: { kind: 'delivery', fee: 30, notes: [] } },
+      { ...base, lines: [line()], delivery: { id: 'delivery', kind: 'delivery', fee: 30, notes: [] } },
       { shippingCountries: ['IL'] }
     );
     expect(p.line_items[0].price_data.unit_amount).toBe(12000);
@@ -97,7 +98,7 @@ describe('checkoutParams', () => {
 
   it('asks no address for pickup and adds no free-fee line', () => {
     const p: any = checkoutParams(
-      { ...base, lines: [line()], delivery: { kind: 'pickup', fee: 0, notes: [] } },
+      { ...base, lines: [line()], delivery: { id: 'pickup', kind: 'pickup', fee: 0, notes: [] } },
       { shippingCountries: ['IL'] }
     );
     expect(p.line_items).toHaveLength(1);
@@ -141,7 +142,7 @@ describe('orderFromSession', () => {
       delivery: {
         preference: 'delivery',
         fee: 30,
-        address: { name: 'Dana L', street: 'Herzl 1', city: 'Netanya', postalCode: '42000', country: 'IL' }
+        address: { name: 'Dana L', street: 'Herzl 1', city: 'Netanya', zip: '42000', country: 'IL' }
       },
       lines: [{ productId: '77', variantId: '2', quantity: 2, unitPrice: 120 }]
     });

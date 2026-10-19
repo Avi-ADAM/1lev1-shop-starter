@@ -1,4 +1,4 @@
-import type { CartItem, DeliveryOption, Image, Product } from '$lib/types';
+import type { CartItem, DeliveryOption, Image, PickupPoint, Product } from '$lib/types';
 import {
   activeVariants,
   maxQuantityOf,
@@ -40,9 +40,19 @@ export type CartProblem =
   | { kind: 'tooManyLines' };
 
 export interface DeliveryChoice {
+  /** What the buyer picks and the order reports: the rikma's option id, or the kind itself. */
+  id: string;
   kind: 'pickup' | 'delivery' | 'digital' | 'contact';
   fee: number;
   notes: string[];
+  /** The method's or pickup point's own name, when the rikma set shipping up. */
+  name?: string | null;
+  etaMinDays?: number | null;
+  etaMaxDays?: number | null;
+  nextDispatch?: string | null;
+  freeOverRemaining?: number | null;
+  free?: boolean;
+  pickupPoint?: PickupPoint | null;
 }
 
 export interface PricedCart {
@@ -88,7 +98,7 @@ export function normalizeItems(raw: unknown): CartItem[] {
  */
 export function deliveryChoicesOf(products: Product[]): DeliveryChoice[] {
   const declaring = products.filter((p) => (p.delivery ?? []).length > 0);
-  if (declaring.length === 0) return [{ kind: 'contact', fee: 0, notes: [] }];
+  if (declaring.length === 0) return [{ id: 'contact', kind: 'contact', fee: 0, notes: [] }];
   const choices: DeliveryChoice[] = [];
   for (const kind of KINDS) {
     const offers: DeliveryOption[] = [];
@@ -103,12 +113,13 @@ export function deliveryChoicesOf(products: Product[]): DeliveryChoice[] {
     }
     if (!everyone) continue;
     choices.push({
+      id: kind,
       kind,
       fee: round2(Math.max(0, ...offers.map((o) => o.fee ?? 0))),
       notes: [...new Set(offers.map((o) => o.note).filter((n): n is string => !!n))]
     });
   }
-  return choices.length ? choices : [{ kind: 'contact', fee: 0, notes: [] }];
+  return choices.length ? choices : [{ id: 'contact', kind: 'contact', fee: 0, notes: [] }];
 }
 
 export async function priceCart(

@@ -2,15 +2,20 @@
   import { onMount } from 'svelte';
   import { page } from '$app/state';
   import { cart } from '$lib/cart.svelte';
-  import { fill, money, t } from '$lib/texts';
-  import type { CartProblem, PricedCart } from '$lib/server/cart';
+  import { fill, money, t, LANG } from '$lib/texts';
+  import type { CartProblem, DeliveryChoice, PricedCart } from '$lib/server/cart';
+  import type { DeliveryState } from '$lib/server/delivery';
+  import { EMPTY_ADDRESS, missingForDelivery, type BuyerAddress } from '$lib/address';
+  import type { Locality } from '$lib/types';
+
+  type Cart = PricedCart & { shipping?: DeliveryState };
 
   let { data } = $props();
 
   // Back from a provider without paying (`?payment=failed|shipping`).
   const returned = page.url.searchParams.get('payment');
 
-  let priced = $state<PricedCart | null>(null);
+  let priced = $state<Cart | null>(null);
   let loading = $state(true);
   let paying = $state<string | null>(null);
   let failed = $state(false);
@@ -20,16 +25,112 @@
 
   // Order now, pay by arrangement — the buyer leaves a name and a phone.
   let arranging = $state(false);
-  let buyer = $state({ name: '', phone: '', email: '', city: '', street: '', website: '' });
+  let buyer = $state({ name: '', phone: '', email: '', website: '' });
+
+  // Where it goes — it decides the delivery price, so it is asked here, before payment.
+  let address = $state<BuyerAddress>({ ...EMPTY_ADDRESS });
+  let missing = $state<string[]>([]);
+  let quoting = $state(false);
+  let localities = $state<Locality[]>([]);
+  let streets = $state<string[]>([]);
+  let streetsFor = '';
   let badFields = $state<string[]>([]);
   let arrangedError = $state<string | null>(null);
 
-  const choice = $derived(priced?.delivery.find((d) => d.kind === delivery) ?? priced?.delivery[0] ?? null);
+  const choice = $derived(priced?.delivery.find((d) => d.id === delivery) ?? priced?.delivery[0] ?? null);
+  const shipping = $derived(priced?.shipping ?? null);
+  // The address form shows when a parcel is possible, or when one could be with a city.
+  const askAddress = $derived(
+    !!priced &&
+      (choice?.kind === 'delivery' || !!shipping?.needsAddress || !!shipping?.outsideZones ||
+        (!!shipping?.zones && priced.delivery.some((d) => d.kind === 'delivery')))
+  );
+  // The countries the rikma's zones name — Israel first, the rest by name.
+  const countries = $derived.by(() => {
+    const list = new Set<string>(['IL']);
+    for (const z of data.shipping?.zones ?? []) for (const c of z.countries) list.add(c);
+    return [...list];
+  });
+  const regionNames = (() => {
+    try {
+      return new Intl.DisplayNames([LANG], { type: 'region' });
+    } catch {
+      return null;
+    }
+  })();
+  const countryName = (c: string) => regionNames?.of(c) ?? c;
+  const locality = $derived(localities.find((l) => l.name === address.city.trim()) ?? null);
+  const cityOptions = $derived.by(() => {
+    const q = address.city.trim();
+    if (q.length < 1) return [];
+    return localities.filter((l) => l.name.startsWith(q) || (l.nameEn ?? '').toLowerCase().startsWith(q.toLowerCase())).slice(0, 40);
+  });
+  const streetOptions = $derived.by(() => {
+    const q = address.street.trim();
+    return (q ? streets.filter((s) => s.includes(q)) : streets).slice(0, 40);
+  });
+
+  function choiceLabel(d: DeliveryChoice): string {
+    if (d.kind === 'pickup' && d.pickupPoint) return fill(t.shipPickupAt, { name: d.pickupPoint.name });
+    return d.name || t.deliveryKinds[d.kind] || d.kind;
+  }
+  function etaText(d: DeliveryChoice): string {
+    const min = d.etaMinDays ?? null;
+    const max = d.etaMaxDays ?? null;
+    if (min === null && max === null) return '';
+    if (min !== null && max !== null && min !== max) return fill(t.shipEtaRange, { min, max });
+    return fill(t.shipEtaDays, { days: (max ?? min) as number });
+  }
+  function dateText(iso: string): string {
+    return new Intl.DateTimeFormat(LANG === 'he' ? 'he-IL' : 'en', { weekday: 'long', day: 'numeric', month: 'numeric', timeZone: 'UTC' }).format(new Date(iso));
+  }
+  const FIELD_LABEL: Record<string, string> = { city: t.shipCity, street: t.shipStreet, house: t.shipHouse, zip: t.shipZip };
+
+  async function loadLocalities() {
+    if (localities.length) return;
+    try {
+      const res = await fetch('/api/places');
+      if (res.ok) localities = (await res.json())?.cities ?? [];
+    } catch {
+      /* the city is typed by hand */
+    }
+  }
+  $effect(() => {
+    if (askAddress && address.country === 'IL') loadLocalities();
+  });
+  $effect(() => {
+    const code = locality?.code ?? '';
+    if (!code || code === streetsFor) return;
+    streetsFor = code;
+    streets = [];
+    fetch(`/api/places?city=${code}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b) => {
+        if (streetsFor === code) streets = b?.streets ?? [];
+      })
+      .catch(() => {});
+  });
+
+  // A city, country or postal code that changed re-prices the delivery.
+  let quoteKey = 'IL||';
+  let quoteTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => {
+    const key = [address.country, address.city.trim(), address.zip.trim()].join('|');
+    if (!priced || key === quoteKey) return;
+    clearTimeout(quoteTimer);
+    quoteTimer = setTimeout(() => {
+      quoteKey = key;
+      reprice();
+    }, 450);
+  });
   const total = $derived(priced ? Math.round((priced.subtotal + (choice?.fee ?? 0)) * 100) / 100 : 0);
 
-  function take(next: PricedCart) {
+  // Until the buyer picks a way themselves, the first one offered is theirs —
+  // so a courier that appears once the city is known replaces a default pickup.
+  let picked = false;
+  function take(next: Cart) {
     priced = next;
-    if (!next.delivery.some((d) => d.kind === delivery)) delivery = next.delivery[0]?.kind ?? '';
+    if (!picked || !next.delivery.some((d) => d.id === delivery)) delivery = next.delivery[0]?.id ?? '';
     // The server's cart is the truth: drop what is gone, clamp what is short.
     const same =
       next.items.length === cart.items.length &&
@@ -42,16 +143,24 @@
 
   async function reprice() {
     loading = true;
+    quoting = true;
     try {
       const res = await fetch('/api/cart', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: cart.items })
+        body: JSON.stringify({ items: cart.items, address })
       });
       if (res.ok) take(await res.json());
     } finally {
       loading = false;
+      quoting = false;
     }
+  }
+
+  /** Before any payment: a parcel needs a full address. */
+  function addressReady(): boolean {
+    missing = choice?.kind === 'delivery' ? missingForDelivery(address) : [];
+    return missing.length === 0;
   }
 
   onMount(reprice);
@@ -71,6 +180,7 @@
 
   async function pay(provider: string) {
     if (!priced || paying) return;
+    if (!addressReady()) return;
     paying = provider;
     failed = false;
     try {
@@ -79,7 +189,9 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           items: cart.items,
-          delivery: choice?.kind,
+          delivery: choice?.id,
+          expectedDeliveryFee: choice?.fee,
+          address: choice?.kind === 'delivery' ? address : null,
           note,
           provider,
           expectedSubtotal: priced.subtotal
@@ -93,6 +205,8 @@
       if (res.status === 409 && body?.cart) {
         take(body.cart);
         changed = true;
+      } else if (res.status === 400 && body?.reason === 'address') {
+        missing = body.fields ?? [];
       } else {
         failed = true;
       }
@@ -105,6 +219,7 @@
   async function sendArranged(e: SubmitEvent) {
     e.preventDefault();
     if (!priced || paying) return;
+    if (!addressReady()) return;
     paying = 'arranged';
     badFields = [];
     arrangedError = null;
@@ -114,7 +229,9 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           items: cart.items,
-          delivery: choice?.kind,
+          delivery: choice?.id,
+          expectedDeliveryFee: choice?.fee,
+          address: choice?.kind === 'delivery' ? address : null,
           note,
           buyer,
           expectedSubtotal: priced.subtotal
@@ -132,6 +249,8 @@
         arrangedError = t.cartChanged;
       } else if (res.status === 400 && body?.reason === 'invalid') {
         badFields = body.fields ?? [];
+        const addr = badFields.filter((f) => f in FIELD_LABEL);
+        if (addr.length) missing = addr;
         arrangedError = t.arrangedInvalid;
       } else if (res.status === 429) {
         arrangedError = t.arrangedTooMany;
@@ -213,14 +332,74 @@
 
     {#if priced.lines.length > 0}
       <aside class="summary">
+        {#if askAddress}
+          <fieldset class="address" aria-busy={quoting}>
+            <legend>{t.shipAddress}</legend>
+            {#if countries.length > 1}
+              <label class="field">
+                <span>{t.shipCountry}</span>
+                <select bind:value={address.country}>
+                  {#each countries as c (c)}<option value={c}>{countryName(c)}</option>{/each}
+                </select>
+              </label>
+            {/if}
+            <label class="field" class:bad={missing.includes('city')}>
+              <span>{t.shipCity}</span>
+              <input autocomplete="address-level2" maxlength="120" list="ship-cities" bind:value={address.city} />
+              <datalist id="ship-cities">
+                {#each cityOptions as l (l.code)}<option value={l.name}></option>{/each}
+              </datalist>
+            </label>
+            <div class="row2">
+              <label class="field grow" class:bad={missing.includes('street')}>
+                <span>{t.shipStreet}</span>
+                <input autocomplete="address-line1" maxlength="160" list="ship-streets" bind:value={address.street} />
+                <datalist id="ship-streets">
+                  {#each streetOptions as s (s)}<option value={s}></option>{/each}
+                </datalist>
+              </label>
+              <label class="field small" class:bad={missing.includes('house')}>
+                <span>{t.shipHouse}</span>
+                <input inputmode="numeric" maxlength="20" bind:value={address.house} />
+              </label>
+            </div>
+            <div class="row3">
+              <label class="field"><span>{t.shipApartment}</span><input maxlength="20" bind:value={address.apartment} /></label>
+              <label class="field"><span>{t.shipFloor}</span><input maxlength="20" bind:value={address.floor} /></label>
+              <label class="field"><span>{t.shipEntrance}</span><input maxlength="20" bind:value={address.entrance} /></label>
+            </div>
+            <label class="field" class:bad={missing.includes('zip')}>
+              <span>{t.shipZip}</span>
+              <input autocomplete="postal-code" inputmode="numeric" maxlength="12" bind:value={address.zip} />
+            </label>
+            <label class="field">
+              <span>{t.shipNotes}</span>
+              <input maxlength="200" placeholder={t.shipNotesPlaceholder} bind:value={address.notes} />
+            </label>
+            {#if missing.length}
+              <p class="danger" role="alert">{fill(t.shipMissing, { fields: missing.map((f) => FIELD_LABEL[f] ?? f).join(', ') })}</p>
+            {/if}
+          </fieldset>
+        {/if}
+
         <fieldset>
           <legend>{t.delivery}</legend>
-          {#each priced.delivery as d (d.kind)}
+          {#if quoting}<p class="muted note" role="status">{t.shipQuoting}</p>{/if}
+          {#if shipping?.needsAddress}<p class="muted note">{t.shipNeedsAddress}</p>{/if}
+          {#if shipping?.outsideZones}<p class="warn note">{t.shipOutside}</p>{/if}
+          {#each priced.delivery as d (d.id)}
             <label class="radio">
-              <input type="radio" name="delivery" value={d.kind} bind:group={delivery} />
+              <input type="radio" name="delivery" value={d.id} bind:group={delivery} onchange={() => (picked = true)} />
               <span>
-                {t.deliveryKinds[d.kind] ?? d.kind}
+                {choiceLabel(d)}
                 <span class="muted">· {d.fee > 0 ? money(d.fee, priced.currency) : t.free}</span>
+                {#if etaText(d)}<span class="muted note">{etaText(d)}</span>{/if}
+                {#if d.nextDispatch}<span class="muted note">{fill(t.shipDispatch, { date: dateText(d.nextDispatch) })}</span>{/if}
+                {#if d.pickupPoint}
+                  {#if d.pickupPoint.address || d.pickupPoint.city}<span class="muted note">{[d.pickupPoint.address, d.pickupPoint.city].filter(Boolean).join(', ')}</span>{/if}
+                  {#if d.pickupPoint.hours}<span class="muted note">{d.pickupPoint.hours}</span>{/if}
+                {/if}
+                {#if d.freeOverRemaining}<span class="note accent">{fill(t.shipFreeIn, { amount: money(d.freeOverRemaining, priced.currency) })}</span>{/if}
                 {#each d.notes as n}<span class="muted note">{n}</span>{/each}
               </span>
             </label>
@@ -278,16 +457,6 @@
                 <span>{t.arrangedEmail}</span>
                 <input type="email" autocomplete="email" maxlength="200" bind:value={buyer.email} />
               </label>
-              {#if choice?.kind === 'delivery'}
-                <label class="field" class:bad={badFields.includes('address')}>
-                  <span>{t.arrangedCity}</span>
-                  <input required autocomplete="address-level2" maxlength="120" bind:value={buyer.city} />
-                </label>
-                <label class="field" class:bad={badFields.includes('address')}>
-                  <span>{t.arrangedStreet}</span>
-                  <input required autocomplete="street-address" maxlength="200" bind:value={buyer.street} />
-                </label>
-              {/if}
               <!-- A field people never see; a form-filling bot does (the honeypot). -->
               <label class="hp" aria-hidden="true">
                 Website
@@ -433,6 +602,34 @@
     display: block;
     font-size: 0.85rem;
   }
+  .accent {
+    color: var(--accent, inherit);
+    font-weight: 600;
+  }
+  .address[aria-busy='true'] {
+    opacity: 0.85;
+  }
+  .row2 {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 96px;
+    gap: 8px;
+  }
+  .row3 {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .grow,
+  .small {
+    min-width: 0;
+  }
+  /* An input's default width (its `size`) would push past a narrow column. */
+  .address input,
+  .address select {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
   .field {
     display: grid;
     gap: 4px;
@@ -482,6 +679,7 @@
     padding-top: 14px;
     border-top: 1px solid var(--line);
   }
+  .address .field.bad input,
   .arranged-form .field.bad input {
     border-color: var(--danger, #c0392b);
   }

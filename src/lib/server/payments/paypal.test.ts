@@ -18,6 +18,7 @@ const line = (over: Record<string, unknown> = {}) => ({
 const base = {
   currency: 'ILS',
   deliveryLabel: 'Shipping',
+  address: null,
   displayNumber: 'K7Q4XM',
   note: 'no plastic',
   locale: 'he',
@@ -44,7 +45,7 @@ describe('orderParams', () => {
     const p: any = orderParams({
       ...base,
       lines: [line(), line({ productId: '78', variantId: null, unitPrice: 0.1, quantity: 3, optionLabel: null })],
-      delivery: { kind: 'delivery', fee: 30, notes: [] }
+      delivery: { id: 'delivery', kind: 'delivery', fee: 30, notes: [] }
     });
     const pu = p.purchase_units[0];
     expect(pu.items[0]).toMatchObject({ sku: '77|2', quantity: '2', name: 'Shirt — M / red' });
@@ -62,7 +63,7 @@ describe('orderParams', () => {
   });
 
   it('asks no address for pickup and has no shipping amount', () => {
-    const p: any = orderParams({ ...base, lines: [line()], delivery: { kind: 'pickup', fee: 0, notes: [] } });
+    const p: any = orderParams({ ...base, lines: [line()], delivery: { id: 'pickup', kind: 'pickup', fee: 0, notes: [] } });
     expect(p.purchase_units[0].amount.breakdown.shipping).toBeUndefined();
     expect(p.payment_source.paypal.experience_context.shipping_preference).toBe('NO_SHIPPING');
   });
@@ -106,7 +107,7 @@ describe('orderFromPaypal', () => {
       buyer: { name: 'Dana L', email: 'dana@example.com', phone: '0501234567' },
       delivery: {
         preference: 'delivery',
-        address: { name: 'Dana L', street: 'Herzl 1', city: 'Netanya', postalCode: '42000', country: 'IL' },
+        address: { name: 'Dana L', street: 'Herzl 1', city: 'Netanya', zip: '42000', country: 'IL' },
         fee: 30
       },
       lines: [{ productId: '77', variantId: '2', quantity: 2, unitPrice: 120 }],
@@ -160,7 +161,7 @@ describe('the adapter', () => {
     const { adapter, calls } = adapterWith([
       ['POST', '/v2/checkout/orders', () => [200, { links: [{ rel: 'payer-action', href: 'https://paypal/approve' }] }]]
     ]);
-    const out = await adapter.createCheckout({ ...base, lines: [line()], delivery: { kind: 'pickup', fee: 0, notes: [] } });
+    const out = await adapter.createCheckout({ ...base, lines: [line()], delivery: { id: 'pickup', kind: 'pickup', fee: 0, notes: [] } });
     expect(out.redirectUrl).toBe('https://paypal/approve');
     expect(calls).toEqual(['POST /v1/oauth2/token', 'POST /v2/checkout/orders']);
   });
