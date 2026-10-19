@@ -18,6 +18,12 @@
   let delivery = $state<string>('');
   let note = $state('');
 
+  // Order now, pay by arrangement — the buyer leaves a name and a phone.
+  let arranging = $state(false);
+  let buyer = $state({ name: '', phone: '', email: '', city: '', street: '', website: '' });
+  let badFields = $state<string[]>([]);
+  let arrangedError = $state<string | null>(null);
+
   const choice = $derived(priced?.delivery.find((d) => d.kind === delivery) ?? priced?.delivery[0] ?? null);
   const total = $derived(priced ? Math.round((priced.subtotal + (choice?.fee ?? 0)) * 100) / 100 : 0);
 
@@ -92,6 +98,46 @@
       }
     } catch {
       failed = true;
+    }
+    paying = null;
+  }
+
+  async function sendArranged(e: SubmitEvent) {
+    e.preventDefault();
+    if (!priced || paying) return;
+    paying = 'arranged';
+    badFields = [];
+    arrangedError = null;
+    try {
+      const res = await fetch('/api/arranged', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: cart.items,
+          delivery: choice?.kind,
+          note,
+          buyer,
+          expectedSubtotal: priced.subtotal
+        })
+      });
+      const body = await res.json().catch(() => null);
+      if (res.ok && body?.redirectUrl) {
+        window.location.href = body.redirectUrl;
+        return;
+      }
+      if (res.status === 409 && body?.cart) {
+        take(body.cart);
+        changed = true;
+      } else if (res.status === 400 && body?.reason === 'invalid') {
+        badFields = body.fields ?? [];
+        arrangedError = t.arrangedInvalid;
+      } else if (res.status === 429) {
+        arrangedError = t.arrangedTooMany;
+      } else {
+        arrangedError = t.arrangedFailed;
+      }
+    } catch {
+      arrangedError = t.arrangedFailed;
     }
     paying = null;
   }
@@ -203,6 +249,57 @@
           </button>
         {/each}
         {#if failed}<p class="danger" role="alert">{t.checkoutFailed}</p>{/if}
+
+        {#if data.arranged}
+          {#if !arranging}
+            <button
+              class="btn pay arranged"
+              class:quiet={data.providers.length > 0}
+              type="button"
+              disabled={!!paying || loading}
+              onclick={() => (arranging = true)}
+            >
+              {t.payArranged}
+            </button>
+          {:else}
+            <form class="arranged-form" onsubmit={sendArranged}>
+              <p class="muted">{t.arrangedIntro}</p>
+              <label class="field" class:bad={badFields.includes('name')}>
+                <span>{t.arrangedName}</span>
+                <input required autocomplete="name" maxlength="120" bind:value={buyer.name} />
+              </label>
+              <label class="field" class:bad={badFields.includes('phone')}>
+                <span>{t.arrangedPhone}</span>
+                <input required type="tel" autocomplete="tel" maxlength="40" bind:value={buyer.phone} />
+              </label>
+              <label class="field" class:bad={badFields.includes('email')}>
+                <span>{t.arrangedEmail}</span>
+                <input type="email" autocomplete="email" maxlength="200" bind:value={buyer.email} />
+              </label>
+              {#if choice?.kind === 'delivery'}
+                <label class="field" class:bad={badFields.includes('address')}>
+                  <span>{t.arrangedCity}</span>
+                  <input required autocomplete="address-level2" maxlength="120" bind:value={buyer.city} />
+                </label>
+                <label class="field" class:bad={badFields.includes('address')}>
+                  <span>{t.arrangedStreet}</span>
+                  <input required autocomplete="street-address" maxlength="200" bind:value={buyer.street} />
+                </label>
+              {/if}
+              <!-- A field people never see; a form-filling bot does (the honeypot). -->
+              <label class="hp" aria-hidden="true">
+                Website
+                <input tabindex="-1" autocomplete="off" bind:value={buyer.website} />
+              </label>
+              <button class="btn pay" type="submit" disabled={!!paying || loading}>
+                {paying === 'arranged' ? t.arrangedSending : t.arrangedSubmit}
+              </button>
+              {#if arrangedError}<p class="danger" role="alert">{arrangedError}</p>{/if}
+            </form>
+          {/if}
+        {:else if data.providers.length === 0}
+          <p class="muted" role="status">{t.noPayment}</p>
+        {/if}
       </aside>
     {/if}
   </div>
@@ -370,5 +467,27 @@
   .pay.paypal {
     background: #ffc439;
     color: #111;
+  }
+  /* Beside a card button, arranging is the second way, not the first. */
+  .pay.arranged.quiet {
+    margin-top: 8px;
+    background: none;
+    color: inherit;
+    border: 1px solid var(--line);
+  }
+  .arranged-form {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+  }
+  .arranged-form .field.bad input {
+    border-color: var(--danger, #c0392b);
+  }
+  .hp {
+    position: absolute;
+    left: -10000px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
   }
 </style>

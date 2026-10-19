@@ -111,7 +111,9 @@ export interface OrderView {
   orderRef: string;
   orderId: string | null;
   displayNumber: string | null;
-  status: 'paid' | 'shipped' | 'fulfilled' | 'cancelled' | string;
+  status: 'pendingPayment' | 'paid' | 'shipped' | 'fulfilled' | 'cancelled' | string;
+  /** While an arranged order waits for its payment: when it lapses. */
+  expiresAt?: string | null;
   oversold: boolean;
   total: number | null;
   currency: string | null;
@@ -131,6 +133,10 @@ export interface OrderView {
 /** The body of `POST /orders` (§5.4 of the platform's shop plan). */
 export interface OrderReport {
   externalId: string;
+  /** `arranged` — nothing was charged; the shop calls and collects (see `$lib/server/arranged.ts`). */
+  payment?: 'paid' | 'arranged';
+  /** An arranged order lapses after this many hours unpaid (1lev1's default: 72). */
+  expiresInHours?: number;
   displayNumber?: string;
   paymentRef?: string;
   paymentMethod?: string;

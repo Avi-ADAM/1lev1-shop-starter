@@ -6,8 +6,15 @@
 
   let { data } = $props();
 
-  const paid = $derived(data.state === 'recorded' || data.state === 'recording');
   const order = $derived(data.order);
+  // Arranging: the order is in and the shop will call — the cart did its job too.
+  const paid = $derived(data.state === 'recorded' || data.state === 'recording' || data.state === 'arranging');
+  const arranging = $derived(data.state === 'arranging');
+  const waHref = $derived(
+    data.whatsapp && order
+      ? `https://wa.me/${data.whatsapp}?text=${encodeURIComponent(fill(t.arrangedWhatsappText, { number: order.displayNumber ?? order.orderId ?? '' }))}`
+      : null
+  );
 
   // Paid: the cart did its job. Recording: look again a few times — the
   // provider's notice to the server is usually a second or two behind.
@@ -31,10 +38,14 @@
   <section class="done">
     <div class="check" aria-hidden="true">✓</div>
     <h1>{t.orderTitle}</h1>
+    {#if arranging}<p class="arranged">{t.arrangedThanks}</p>{/if}
 
     {#if order}
       <p class="num">{fill(t.orderNumber, { number: order.displayNumber ?? order.orderId ?? '' })}</p>
       <p class="status">{t.orderStatus[order.status] ?? order.status}</p>
+      {#if arranging && waHref}
+        <a class="btn wa" href={waHref} target="_blank" rel="noopener noreferrer">{t.arrangedWhatsapp}</a>
+      {/if}
 
       <h2>{t.orderLines}</h2>
       <ul class="lines">
@@ -92,6 +103,14 @@
   }
   .status {
     margin: 4px 0 24px;
+  }
+  .arranged {
+    margin: 0 0 16px;
+  }
+  .wa {
+    margin: -8px 0 24px;
+    background: #25d366;
+    color: #0b2e17;
   }
   h2 {
     font-size: 1rem;

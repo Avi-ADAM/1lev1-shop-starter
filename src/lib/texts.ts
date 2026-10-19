@@ -50,6 +50,23 @@ const he = {
   pay: 'למעבר לתשלום',
   paying: 'מעבירים לתשלום…',
   checkoutFailed: 'לא הצלחנו לפתוח את דף התשלום. נסו שוב בעוד רגע.',
+  // Order now, pay by arrangement (ARRANGED_PAYMENT)
+  payArranged: 'הזמנה ותשלום בתיאום',
+  arrangedIntro: 'לא תחויבו עכשיו. נחזור אליכם לתיאום התשלום — בביט, בהעברה או במזומן.',
+  arrangedName: 'שם',
+  arrangedPhone: 'טלפון',
+  arrangedEmail: 'אימייל (לא חובה)',
+  arrangedCity: 'עיר',
+  arrangedStreet: 'רחוב ומספר',
+  arrangedSubmit: 'שליחת ההזמנה',
+  arrangedSending: 'שולחים…',
+  arrangedInvalid: 'בדקו את השדות המסומנים.',
+  arrangedTooMany: 'נשלחו מכאן יותר מדי הזמנות. נסו שוב בעוד כמה דקות.',
+  arrangedFailed: 'לא הצלחנו לשלוח את ההזמנה. נסו שוב בעוד רגע.',
+  arrangedThanks: 'לא חויבתם. ניצור איתכם קשר בהקדם כדי לתאם את התשלום.',
+  arrangedWhatsapp: 'לכתוב לנו בוואטסאפ',
+  arrangedWhatsappText: 'שלום, לגבי הזמנה {{number}}',
+  noPayment: 'החנות עוד לא מקבלת הזמנות באתר — צרו איתנו קשר.',
   payWith: {
     stripe: 'תשלום בכרטיס אשראי',
     paypal: 'תשלום ב־PayPal'
@@ -73,6 +90,7 @@ const he = {
   orderUnknown: 'לא מצאנו את ההזמנה הזו.',
   backToCart: 'חזרה לעגלה',
   orderStatus: {
+    pendingPayment: 'התקבלה — ממתינה לתיאום התשלום',
     paid: 'התקבלה — מכינים אותה',
     shipped: 'נשלחה',
     fulfilled: 'נמסרה',
@@ -130,6 +148,23 @@ const en: Texts = {
   pay: 'Continue to payment',
   paying: 'Opening the payment page…',
   checkoutFailed: 'The payment page could not be opened. Please try again in a moment.',
+  // Order now, pay by arrangement (ARRANGED_PAYMENT)
+  payArranged: 'Order now, arrange payment',
+  arrangedIntro: "You won't be charged now. We'll get back to you to arrange the payment — by transfer, cash or another way.",
+  arrangedName: 'Name',
+  arrangedPhone: 'Phone',
+  arrangedEmail: 'Email (optional)',
+  arrangedCity: 'City',
+  arrangedStreet: 'Street and number',
+  arrangedSubmit: 'Send the order',
+  arrangedSending: 'Sending…',
+  arrangedInvalid: 'Please check the highlighted fields.',
+  arrangedTooMany: 'Too many orders were sent from here. Please try again in a few minutes.',
+  arrangedFailed: "The order couldn't be sent. Please try again in a moment.",
+  arrangedThanks: "You haven't been charged. We'll be in touch soon to arrange the payment.",
+  arrangedWhatsapp: 'Message us on WhatsApp',
+  arrangedWhatsappText: 'Hi, about order {{number}}',
+  noPayment: "The shop isn't taking orders on the site yet — please get in touch.",
   payWith: {
     stripe: 'Pay by card',
     paypal: 'Pay with PayPal'
@@ -153,6 +188,7 @@ const en: Texts = {
   orderUnknown: 'We could not find this order.',
   backToCart: 'Back to cart',
   orderStatus: {
+    pendingPayment: 'Received — awaiting payment arrangement',
     paid: 'Received — being prepared',
     shipped: 'Shipped',
     fulfilled: 'Delivered',

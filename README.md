@@ -86,9 +86,42 @@ reason.
    | `LEV_READ_KEY` | optional — a `products:read` key (drafts, higher rate limit) |
    | `SHOP_SITE_URL` | optional — your domain, for the payment pages' return links |
    | `SHOP_SHIPPING_COUNTRIES` | optional — `IL` by default |
+   | `ARRANGED_PAYMENT` | optional — `phone,whatsapp` turns on "order now, pay by arrangement" |
+   | `SHOP_WHATSAPP` | optional — your WhatsApp number (`972…`), for the thank-you page |
+   | `ARRANGED_EXPIRES_HOURS` | optional — when an uncollected order lapses (default 72) |
 
 4. Deploy. Buy something with a [Stripe test card](https://docs.stripe.com/testing)
    and watch it arrive in the rikma's orders.
+
+## Order now, pay by arrangement
+
+For a shop with no Stripe or PayPal yet — or as a second button beside them —
+set `ARRANGED_PAYMENT=phone,whatsapp`. The cart then offers **"Order now,
+arrange payment"**: the buyer leaves a name and a phone (and an address for a
+parcel), and nothing is charged.
+
+```
+buyer ─▶ your shop ─▶ /api/arranged ─▶ POST /orders { payment: "arranged" }
+                                          │
+                                          ▼
+          the rikma: "awaiting payment" — call or WhatsApp the buyer
+                                          │ the money arrives (bit, transfer, cash)
+                                          ▼
+          "payment received" by the member who got it ─▶ sales, stock, ready to ship
+```
+
+- The order waits in the rikma's **Orders → Awaiting payment** with the
+  buyer's phone, a call button and a WhatsApp button. Nothing is sold and no
+  stock moves until a member presses **Payment received** — and whoever
+  presses it is recorded as holding the money.
+- An order nobody collects **lapses by itself** (72 hours by default,
+  `ARRANGED_EXPIRES_HOURS` to change it). A junk form is noise that clears
+  itself; a hidden honeypot field and a per-address rate limit keep even that
+  down.
+- The thank-you page says the order is in and that you will be in touch, and
+  with `SHOP_WHATSAPP` set it offers a WhatsApp button to your number.
+- With no Stripe or PayPal keys at all, this is the only way to order — the
+  shop works with **no payment provider**.
 
 ## What sells here
 
