@@ -1,0 +1,21 @@
+# Netlify: how to build the shop, and what the "Deploy to Netlify" button asks for.
+# svelte.config.js picks adapter-netlify by itself when NETLIFY is set.
+
+[build]
+  command = "npm run build"
+  publish = "build"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# The button's form. Only the two values every shop needs are listed here:
+# a shop can take Stripe, PayPal or both, and a key listed here is asked of
+# everyone. Add the payment keys afterwards under Site configuration →
+# Environment variables (see .env.example).
+#
+# Easier still: open the rikma's "Sales management → Connections" page on
+# 1lev1 and use its Netlify button — it fills in the rikma address (and the
+# key, right after you create it) and asks for the payment provider you pick.
+[template.environment]
+  LEV_RIKMA_URL = "The rikma's API address, e.g. https://www.1lev1.com/api/v1/r/<your rikma>"
+  LEV_ORDERS_KEY = "A key with orders:create + orders:read, from the rikma's Connections page"

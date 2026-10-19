@@ -6,8 +6,15 @@ Stripe Checkout and/or PayPal, and a "thank you" page that shows the order's sta
 rikma stays the backend: products, stock, orders and the partners' shares
 live there. This repo holds no database and no admin panel.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FAvi-ADAM%2F1lev1-shop-starter&env=LEV_RIKMA_URL,LEV_ORDERS_KEY,STRIPE_SECRET_KEY,STRIPE_WEBHOOK_SECRET&envDescription=The%20rikma%20address%2C%20an%20orders%20key%2C%20and%20your%20Stripe%20keys&envLink=https%3A%2F%2Fgithub.com%2FAvi-ADAM%2F1lev1-shop-starter%23setup)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FAvi-ADAM%2F1lev1-shop-starter&env=LEV_RIKMA_URL,LEV_ORDERS_KEY&envDescription=The%20rikma%20address%20and%20an%20orders%20key.%20Add%20your%20Stripe%20and%2For%20PayPal%20keys%20after%20deploying&envLink=https%3A%2F%2Fgithub.com%2FAvi-ADAM%2F1lev1-shop-starter%23setup)
 [![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/Avi-ADAM/1lev1-shop-starter)
+
+**Easiest:** deploy from your rikma instead — 1lev1 → the rikma → *Sales
+management → Connections*. Its Vercel and Netlify buttons create the key for
+you, fill in the rikma address and the key, and ask only for the payment
+provider you choose (Stripe, PayPal or both). The buttons above ask for the
+two 1lev1 values; add the payment keys you use in the host's environment
+variables (see [Setup](#setup)).
 
 ## How an order travels
 
@@ -51,9 +58,10 @@ reason.
 ## Setup
 
 1. **In your rikma** (1lev1 → the rikma → *Sales management → Connections*):
-   create an API key with **`orders:create` + `orders:read`**. It records
+   press **Create a shop key** — it makes a key with
+   **`orders:create` + `orders:read`**. It records
    sales that change the partners' balances: it belongs on the server only.
-   Its owner is the member whose Stripe account receives the money.
+   Its owner is the member whose Stripe or PayPal account receives the money.
 2. **In Stripe** (Developers → Webhooks): add an endpoint
    `https://<your-site>/api/payments/webhook` with the events
    `checkout.session.completed` and `checkout.session.async_payment_succeeded`.
