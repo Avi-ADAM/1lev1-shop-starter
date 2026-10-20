@@ -625,7 +625,8 @@
   }
   /* An input's default width (its `size`) would push past a narrow column. */
   .address input,
-  .address select {
+  .address select,
+  .arranged-form .field input {
     width: 100%;
     min-width: 0;
     box-sizing: border-box;
@@ -683,11 +684,14 @@
   .arranged-form .field.bad input {
     border-color: var(--danger, #c0392b);
   }
+  /* Clipped in place, not pushed off-screen: in RTL a far negative `left`
+     is scrollable and widens the page by thousands of pixels. */
   .hp {
     position: absolute;
-    left: -10000px;
     width: 1px;
     height: 1px;
     overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 </style>
