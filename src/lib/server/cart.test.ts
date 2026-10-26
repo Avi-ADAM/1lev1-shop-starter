@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { product, shirt } from '../../test/fixtures';
-import { deliveryChoicesOf, normalizeItems, priceCart } from './cart';
+import { applyQuote, chargeLines, deliveryChoicesOf, endedPromotions, normalizeItems, priceCart } from './cart';
 import type { Product } from '$lib/types';
 
 function catalog(...products: Product[]) {
@@ -115,5 +115,61 @@ describe('deliveryChoicesOf', () => {
     expect(deliveryChoicesOf([product({ delivery: [pickup] }), product({ delivery: [ship(10)] })])).toEqual([
       { id: 'contact', kind: 'contact', fee: 0, notes: [] }
     ]);
+  });
+});
+
+describe('promotions — 1lev1 prices, the shop asks', () => {
+  const quoteOf = (lines: any[], over: Record<string, unknown> = {}) => ({
+    currency: 'ILS',
+    lines,
+    listTotal: 0,
+    subtotal: 0,
+    thresholdDiscount: 0,
+    total: 0,
+    applied: [{ promotionId: '9', name: 'Summer', kind: 'bundle', discount: 10 }],
+    hints: [],
+    ...over
+  });
+
+  it("charges the quote's line totals and names the promotion", async () => {
+    const res = await priceCart([{ productId: '1', quantity: 3 }], catalog(product({ id: '1', price: 40 })), async (lines) =>
+      quoteOf(lines.map((l) => ({ ...l, listPrice: 40, unitPrice: 33.3333, lineTotal: 100, discount: 20, promotionId: '9' })))
+    );
+    expect(res.listSubtotal).toBe(120);
+    expect(res.subtotal).toBe(100);
+    expect(res.lines[0]).toMatchObject({ listPrice: 40, total: 100, promotionId: '9' });
+    expect(res.promotions).toEqual([{ id: '9', name: 'Summer' }]);
+  });
+
+  it('a quote that disagrees about the cart, or fails, leaves the catalog prices', async () => {
+    const wrongQty = await priceCart([{ productId: '1', quantity: 2 }], catalog(product({ id: '1', price: 40 })), async (lines) =>
+      quoteOf(lines.map((l) => ({ ...l, quantity: 1, listPrice: 40, unitPrice: 30, lineTotal: 30, discount: 10, promotionId: '9' })))
+    );
+    expect(wrongQty.subtotal).toBe(80);
+    const failed = await priceCart([{ productId: '1', quantity: 2 }], catalog(product({ id: '1', price: 40 })), async () => {
+      throw new Error('down');
+    });
+    expect(failed.subtotal).toBe(80);
+    expect(failed.lines[0].promotionId).toBeNull();
+  });
+
+  it('never charges more than the catalog', () => {
+    const line = { productId: '1', variantId: null, name: 'A', optionLabel: null, image: null, listPrice: 40, unitPrice: 40, quantity: 1, total: 40, promotionId: null, minQuantity: 1, maxQuantity: 9 };
+    const q = quoteOf([{ lineId: '0', productId: '1', variantId: null, quantity: 1, listPrice: 40, unitPrice: 55, lineTotal: 55, discount: 0, promotionId: '9' }]);
+    expect(applyQuote([line], q as any)?.lines[0]).toMatchObject({ total: 40, promotionId: null });
+  });
+
+  it('a total that does not split into whole cents becomes two charge lines', () => {
+    const line = { productId: '1', variantId: null, name: 'A', optionLabel: null, image: null, listPrice: 40, unitPrice: 33.3333, quantity: 3, total: 100, promotionId: '9', minQuantity: 1, maxQuantity: 9 };
+    const charged = chargeLines([line]);
+    expect(charged.map((l) => [l.quantity, l.unitPrice])).toEqual([[2, 33.33], [1, 33.34]]);
+    expect(charged.reduce((s, l) => s + Math.round(l.unitPrice * 100) * l.quantity, 0)).toBe(10000);
+    expect(chargeLines([{ ...line, total: 99, unitPrice: 33 }])).toHaveLength(1);
+  });
+
+  it('a promotion the buyer saw and that is gone says so by name', () => {
+    const priced = { promotions: [{ id: '2', name: null }] } as any;
+    expect(endedPromotions(priced, [{ id: '9', name: 'Summer' }, { id: '2', name: 'x' }])).toEqual([{ kind: 'promotionEnded', name: 'Summer' }]);
+    expect(endedPromotions(priced, 'junk')).toEqual([]);
   });
 });

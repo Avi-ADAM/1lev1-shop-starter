@@ -1,11 +1,13 @@
 import { env } from '$env/dynamic/private';
 import type {
+  CartQuote,
   Category,
   Locality,
   OrderReport,
   OrderView,
   Product,
   ProductList,
+  Promotion,
   Rikma,
   ShippingInfo,
   ShippingQuote
@@ -213,6 +215,19 @@ export async function getOrder(cfg: LevConfig, ref: string): Promise<OrderView |
   }
 }
 
+// ─── promotions — what the rikma agreed to, priced by 1lev1 ───────────────
+
+/** Running and coming promotions; `[]` when the rikma has none (or 1lev1 predates them). */
+export async function listPromotions(cfg: LevConfig): Promise<Promotion[]> {
+  try {
+    const res = await call<{ data: Promotion[] }>(cfg, '/promotions', { key: cfg.readKey });
+    return res?.data ?? [];
+  } catch (e) {
+    if (e instanceof LevError && (e.status === 404 || e.status === 405)) return [];
+    throw e;
+  }
+}
+
 // ─── shipping — the rikma's zones and rates, priced by 1lev1 ──────────────
 
 /** `null` when the rikma has not set shipping up (or 1lev1 predates it): products' own options apply. */
@@ -252,6 +267,23 @@ export async function quoteShipping(
   } catch (e) {
     // A 1lev1 that predates shipping answers 404/405: the products' own options apply.
     if (e instanceof LevError && (e.status === 404 || e.status === 405)) return { configured: false, currency: null };
+    throw e;
+  }
+}
+
+/**
+ * The cart under the rikma's promotions — 1lev1 prices, the shop asks, so
+ * there are never two engines that drift. `null` when 1lev1 predates
+ * promotions (404/405): the catalog prices stand.
+ */
+export async function quoteCart(
+  cfg: LevConfig,
+  lines: Array<{ lineId: string; productId: string; variantId: string | null; quantity: number }>
+): Promise<CartQuote | null> {
+  try {
+    return await call<CartQuote>(cfg, '/cart/quote', { method: 'POST', key: cfg.readKey, body: { lines } });
+  } catch (e) {
+    if (e instanceof LevError && (e.status === 404 || e.status === 405)) return null;
     throw e;
   }
 }

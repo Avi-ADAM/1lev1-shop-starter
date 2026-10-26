@@ -194,7 +194,8 @@
           address: choice?.kind === 'delivery' ? address : null,
           note,
           provider,
-          expectedSubtotal: priced.subtotal
+          expectedSubtotal: priced.subtotal,
+          expectedPromotions: priced.promotions
         })
       });
       const body = await res.json().catch(() => null);
@@ -234,7 +235,8 @@
           address: choice?.kind === 'delivery' ? address : null,
           note,
           buyer,
-          expectedSubtotal: priced.subtotal
+          expectedSubtotal: priced.subtotal,
+          expectedPromotions: priced.promotions
         })
       });
       const body = await res.json().catch(() => null);
@@ -264,6 +266,7 @@
   }
 
   function problemText(p: CartProblem): string {
+    if (p.kind === 'promotionEnded' && !p.name) return t.promotionEndedPlain;
     const template = t.problems[p.kind] ?? '';
     return fill(template, {
       name: 'name' in p ? p.name : '',
@@ -302,7 +305,10 @@
           <div class="what">
             <a href="/p/{line.productId}"><strong>{line.name}</strong></a>
             {#if line.optionLabel}<div class="muted">{line.optionLabel}</div>{/if}
-            <div class="muted">{money(line.unitPrice, priced.currency)}</div>
+            <div class="muted">
+              {#if line.promotionId && line.listPrice > line.unitPrice}<s>{money(line.listPrice, priced.currency)}</s>{/if}
+              {money(line.unitPrice, priced.currency)}
+            </div>
           </div>
           <div class="how">
             <label class="qty">
@@ -411,7 +417,22 @@
           <textarea rows="2" maxlength="500" placeholder={t.notePlaceholder} bind:value={note}></textarea>
         </label>
 
+        {#if priced.hints?.length}
+          <ul class="hints">
+            {#each priced.hints as h, i (i)}
+              <li>
+                {h.kind === 'bundle'
+                  ? fill(t.promoHintBundle, { count: h.missingQuantity, qty: h.bundleQuantity, price: money(h.bundlePrice, priced.currency) })
+                  : fill(t.promoHintThreshold, { amount: money(h.amountRemaining, priced.currency) })}
+              </li>
+            {/each}
+          </ul>
+        {/if}
+
         <dl>
+          {#if priced.listSubtotal > priced.subtotal}
+            <div><dt>{t.promoSaved}</dt><dd>−{money(Math.round((priced.listSubtotal - priced.subtotal) * 100) / 100, priced.currency)}</dd></div>
+          {/if}
           <div><dt>{t.subtotal}</dt><dd>{money(priced.subtotal, priced.currency)}</dd></div>
           {#if choice && choice.fee > 0}
             <div><dt>{t.deliveryFee}</dt><dd>{money(choice.fee, priced.currency)}</dd></div>
@@ -479,6 +500,13 @@
 <style>
   h1 {
     margin: 0 0 16px;
+  }
+  .hints {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    color: var(--accent, inherit);
+    font-weight: 600;
   }
   .problems {
     margin: 0 0 16px;

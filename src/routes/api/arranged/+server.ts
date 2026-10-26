@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getProduct, levConfig, LevError, reportOrder } from '$lib/server/lev';
-import { priceCart } from '$lib/server/cart';
+import { getProduct, levConfig, LevError, reportOrder, quoteCart } from '$lib/server/lev';
+import { endedPromotions, priceCart } from '$lib/server/cart';
 import { checkoutDelivery } from '$lib/server/delivery';
 import { newDisplayNumber } from '$lib/server/shop';
 import {
@@ -36,12 +36,15 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 
   const body = await request.json().catch(() => ({}));
   const cfg = levConfig();
-  const priced = await priceCart(body?.items, (id) => getProduct(cfg, id));
+  const priced = await priceCart(body?.items, (id) => getProduct(cfg, id), (lines) => quoteCart(cfg, lines));
 
   const seen = Number(body?.expectedSubtotal);
   const moved = priced.problems.length > 0 || (Number.isFinite(seen) && seen !== priced.subtotal);
   if (moved || priced.lines.length === 0) {
-    return json({ ok: false, reason: 'changed', cart: priced }, { status: 409 });
+    // A promotion that ended between the cart and the payment says so by name.
+    const ended = endedPromotions(priced, body?.expectedPromotions);
+    const cart = ended.length ? { ...priced, problems: [...ended, ...priced.problems] } : priced;
+    return json({ ok: false, reason: ended.length ? 'promotionEnded' : 'changed', cart }, { status: 409 });
   }
   // Not the buyer's doing, and nothing they can fix by reviewing the cart:
   // the catalog sent prices without a currency.

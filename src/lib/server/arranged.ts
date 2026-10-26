@@ -1,5 +1,5 @@
 import { env } from '$env/dynamic/private';
-import type { PricedCart, DeliveryChoice } from './cart';
+import { chargeLines, type PricedCart, type DeliveryChoice } from './cart';
 import type { OrderReport } from '$lib/types';
 import { addressForOrder, type BuyerAddress } from '$lib/address';
 
@@ -120,11 +120,12 @@ export function arrangedReport(args: {
     },
     ...(args.note ? { note: args.note } : {}),
     locale: args.locale,
-    lines: priced.lines.map((l) => ({
+    lines: chargeLines(priced.lines).map((l) => ({
       productId: l.productId,
       ...(l.variantId ? { variantId: l.variantId } : {}),
       quantity: l.quantity,
-      unitPrice: l.unitPrice
+      unitPrice: l.unitPrice,
+      ...(l.promotionId ? { promotionId: l.promotionId } : {})
     }))
   };
 }

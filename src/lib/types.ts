@@ -43,9 +43,30 @@ export interface Variant {
   optionValues: VariantOption[];
   price: number | null;
   compareAtPrice: number | null;
+  /** The price under an item / store promotion; absent or null when none runs (or 1lev1 predates promotions). */
+  salePrice?: number | null;
+  promotion?: PromotionBadge | null;
   availability: Availability;
   images: Image[];
   active: boolean;
+}
+
+/** The promotion behind a `salePrice` — enough for a badge and its end date. */
+export interface PromotionBadge {
+  id: string;
+  name: string | null;
+  kind: string;
+  endsAt: string | null;
+}
+
+/** `GET /promotions` — what the rikma agreed to, running or coming. */
+export interface Promotion extends PromotionBadge {
+  status: 'scheduled' | 'active' | string;
+  scope: { all: boolean; products: string[]; variants: string[]; categories: string[]; exclude: string[] };
+  rule: unknown;
+  startsAt: string | null;
+  /** What is left of a cap; null = no cap. */
+  remaining: { units: number | null; orders: number | null };
 }
 
 export interface DeliveryOption {
@@ -69,7 +90,11 @@ export interface Product {
   images: Image[];
   url: string;
   buyUrl: string | null;
+  /** Under the rikma's promotions: the discounted prices. */
   priceRange: { min: number; max: number; currency: string | null } | null;
+  /** The price under an item / store promotion; absent or null when none runs. */
+  salePrice?: number | null;
+  promotion?: PromotionBadge | null;
   hasVariants: boolean;
   /** May this shop sell it in its own till? `false` ⇒ link to `buyUrl`. */
   checkout: boolean;
@@ -152,7 +177,8 @@ export interface OrderReport {
   };
   note?: string;
   locale?: string;
-  lines: Array<{ productId: string; variantId?: string; quantity: number; unitPrice: number }>;
+  /** `promotionId` — the one `/cart/quote` priced the line with; it keeps the price a moment past the end. */
+  lines: Array<{ productId: string; variantId?: string; quantity: number; unitPrice: number; promotionId?: string }>;
 }
 
 /** One cart row as the browser keeps it — ids and a count, never a price. */
@@ -210,6 +236,36 @@ export interface ShippingQuote {
   needsAddress?: boolean;
   outsideZones?: boolean;
   noDeliveryProducts?: string[];
+}
+
+/**
+ * `POST /cart/quote` — the cart priced by 1lev1 under the rikma's promotions.
+ * `lineTotal` is the exact amount due for a line; `unitPrice` is its average
+ * and may carry a fraction of a cent when a bundle or a threshold is shared out.
+ */
+export interface CartQuote {
+  currency: string | null;
+  lines: Array<{
+    lineId: string | null;
+    productId: string;
+    variantId: string | null;
+    quantity: number;
+    listPrice: number;
+    unitPrice: number;
+    lineTotal: number;
+    discount: number;
+    promotionId: string | null;
+  }>;
+  listTotal: number;
+  subtotal: number;
+  thresholdDiscount: number;
+  total: number;
+  applied: Array<{ promotionId: string; name?: string | null; kind: string; discount: number }>;
+  /** What would lower the cart more: "2 more for 3 for 100", "40 more for 30 off". */
+  hints: Array<
+    | { kind: 'bundle'; promotionId: string; missingQuantity: number; bundleQuantity: number; bundlePrice: number }
+    | { kind: 'threshold'; promotionId: string; amountRemaining: number; minSubtotal: number }
+  >;
 }
 
 /** A locality from the CBS list, served by 1lev1's `/places/cities`. */

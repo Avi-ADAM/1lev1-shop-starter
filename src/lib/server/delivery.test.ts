@@ -9,7 +9,10 @@ const priced: PricedCart = {
   lines: [{ productId: '1', variantId: null, unitPrice: 100, quantity: 2, total: 200 } as any],
   items: [],
   currency: 'ILS',
+  listSubtotal: 200,
   subtotal: 200,
+  promotions: [],
+  hints: [],
   problems: [],
   delivery: [{ id: 'pickup', kind: 'pickup', fee: 0, notes: [] }]
 };
@@ -94,7 +97,7 @@ describe('the address rides through the payment provider', () => {
   const choice = { id: 'm:center:courier', kind: 'delivery' as const, fee: 30, notes: [] };
   const address = { ...EMPTY_ADDRESS, city: 'רמת גן', street: 'ביאליק', house: '3', apartment: '7' };
   const input = {
-    lines: [{ productId: '1', variantId: null, name: 'כד', optionLabel: null, image: null, unitPrice: 100, quantity: 2, total: 200, minQuantity: 1, maxQuantity: 9 }],
+    lines: [{ productId: '1', variantId: null, name: 'כד', optionLabel: null, image: null, listPrice: 100, unitPrice: 100, quantity: 2, total: 200, promotionId: null, minQuantity: 1, maxQuantity: 9 }],
     currency: 'ILS',
     delivery: choice,
     deliveryLabel: 'שליח',

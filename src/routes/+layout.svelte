@@ -1,6 +1,7 @@
 <script lang="ts">
   import '../app.css';
   import { cart } from '$lib/cart.svelte';
+  import PromoBanner from '$lib/components/PromoBanner.svelte';
   import { t } from '$lib/texts';
 
   let { data, children } = $props();
@@ -24,6 +25,8 @@
     </a>
   </div>
 </header>
+
+<PromoBanner promotions={data.promotions ?? []} currency={data.rikma?.currency ?? null} />
 
 <main class="wrap">
   {#if data.setupError}

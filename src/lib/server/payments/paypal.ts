@@ -46,15 +46,17 @@ function cut(v: string, max: number): string {
 }
 
 /** `productId` or `productId|variantId` — PayPal gives it back on the order. */
-export function skuOf(productId: string, variantId: string | null): string {
-  return cut(variantId ? `${productId}|${variantId}` : productId, 127);
+/** `product|variant|promotion` — the promotion rides last, so an older sku still reads. */
+export function skuOf(productId: string, variantId: string | null, promotionId: string | null = null): string {
+  const sku = promotionId ? `${productId}|${variantId ?? ''}|${promotionId}` : variantId ? `${productId}|${variantId}` : productId;
+  return cut(sku, 127);
 }
 
-export function idsOfSku(sku: unknown): { productId: string; variantId?: string } | null {
+export function idsOfSku(sku: unknown): { productId: string; variantId?: string; promotionId?: string } | null {
   if (typeof sku !== 'string' || !sku) return null;
-  const [productId, variantId] = sku.split('|', 2);
+  const [productId, variantId, promotionId] = sku.split('|', 3);
   if (!productId) return null;
-  return variantId ? { productId, variantId } : { productId };
+  return { productId, ...(variantId ? { variantId } : {}), ...(promotionId ? { promotionId } : {}) };
 }
 
 /** Apartment, floor and entrance ride on the second address line. */
@@ -79,7 +81,7 @@ export function orderParams(input: CheckoutInput) {
     name: cut(l.optionLabel ? `${l.name} — ${l.optionLabel}` : l.name, 127),
     quantity: String(l.quantity),
     unit_amount: { currency_code: currency, value: moneyValue(toMinor(l.unitPrice, currency), currency) },
-    sku: skuOf(l.productId, l.variantId),
+    sku: skuOf(l.productId, l.variantId, l.promotionId ?? null),
     ...(l.image?.url?.startsWith('https://') ? { image_url: cut(l.image.url, 2048) } : {})
   }));
   const itemTotal = input.lines.reduce((s, l) => s + toMinor(l.unitPrice, currency) * l.quantity, 0);

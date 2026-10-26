@@ -1,5 +1,5 @@
-import { getRikma, getShipping, levConfig, type LevConfig } from './lev';
-import type { Rikma, ShippingInfo } from '$lib/types';
+import { getRikma, getShipping, levConfig, listPromotions, type LevConfig } from './lev';
+import type { Promotion, Rikma, ShippingInfo } from '$lib/types';
 
 /**
  * The rikma's own details change rarely; one read every few minutes is
@@ -34,5 +34,22 @@ export async function shippingOf(cfg: LevConfig = levConfig()): Promise<Shipping
   } catch (e) {
     console.warn('[shop] shipping summary unavailable:', e);
     return shippingCache?.info ?? null;
+  }
+}
+
+/** A promotion starts and ends on the minute; a minute's cache keeps the banner honest. */
+const PROMO_TTL_MS = 60 * 1000;
+let promoCache: { at: number; list: Promotion[] } | null = null;
+
+/** The rikma's running and coming promotions, for the banner. A failure is "no banner", never a broken page. */
+export async function promotionsOf(cfg: LevConfig = levConfig()): Promise<Promotion[]> {
+  if (promoCache && Date.now() - promoCache.at < PROMO_TTL_MS) return promoCache.list;
+  try {
+    const list = await listPromotions(cfg);
+    promoCache = { at: Date.now(), list };
+    return list;
+  } catch (e) {
+    console.warn('[shop] promotions unavailable:', e);
+    return promoCache?.list ?? [];
   }
 }

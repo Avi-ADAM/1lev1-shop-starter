@@ -62,7 +62,7 @@ export function checkoutParams(input: CheckoutInput, opts: { shippingCountries: 
       product_data: {
         name: l.optionLabel ? `${l.name} — ${l.optionLabel}` : l.name,
         images: l.image?.url ? [l.image.url] : undefined,
-        metadata: { productId: l.productId, variantId: l.variantId ?? undefined }
+        metadata: { productId: l.productId, variantId: l.variantId ?? undefined, promotionId: l.promotionId ?? undefined }
       }
     }
   }));
@@ -194,7 +194,8 @@ export function orderFromSession(session: any, lineItems: any[]): OrderReport {
       productId: String(md.productId),
       ...(md.variantId ? { variantId: String(md.variantId) } : {}),
       quantity,
-      unitPrice: unit
+      unitPrice: unit,
+      ...(md.promotionId ? { promotionId: String(md.promotionId) } : {})
     });
   }
 

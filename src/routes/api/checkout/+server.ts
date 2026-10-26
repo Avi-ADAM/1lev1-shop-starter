@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { getProduct, levConfig } from '$lib/server/lev';
-import { priceCart } from '$lib/server/cart';
+import { getProduct, levConfig, quoteCart } from '$lib/server/lev';
+import { chargeLines, endedPromotions, priceCart } from '$lib/server/cart';
 import { checkoutDelivery } from '$lib/server/delivery';
 import { payments, providerNames, siteUrlOf } from '$lib/server/payments';
 import { newDisplayNumber } from '$lib/server/shop';
@@ -22,12 +22,15 @@ export const POST: RequestHandler = async ({ request, url }) => {
     return json({ ok: false, reason: 'provider' }, { status: 400 });
   }
   const cfg = levConfig();
-  const priced = await priceCart(body?.items, (id) => getProduct(cfg, id));
+  const priced = await priceCart(body?.items, (id) => getProduct(cfg, id), (lines) => quoteCart(cfg, lines));
 
   const seen = Number(body?.expectedSubtotal);
   const moved = priced.problems.length > 0 || (Number.isFinite(seen) && seen !== priced.subtotal);
   if (moved || priced.lines.length === 0) {
-    return json({ ok: false, reason: 'changed', cart: priced }, { status: 409 });
+    // A promotion that ended between the cart and the payment says so by name.
+    const ended = endedPromotions(priced, body?.expectedPromotions);
+    const cart = ended.length ? { ...priced, problems: [...ended, ...priced.problems] } : priced;
+    return json({ ok: false, reason: ended.length ? 'promotionEnded' : 'changed', cart }, { status: 409 });
   }
   // Not the buyer's doing, and nothing they can fix by reviewing the cart:
   // the catalog sent prices without a currency.
@@ -52,7 +55,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
 
   try {
     const { redirectUrl } = await payments(provider).createCheckout({
-      lines: priced.lines,
+      lines: chargeLines(priced.lines),
       currency: priced.currency,
       delivery: choice,
       deliveryLabel: choice.name || (t.deliveryKinds[choice.kind] ?? t.deliveryFee),

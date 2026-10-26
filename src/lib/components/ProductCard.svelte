@@ -2,12 +2,13 @@
   import type { Product } from '$lib/types';
   import { fill, money, t } from '$lib/texts';
   import { inStock } from '$lib/variants';
+  import { cardPrice, untilLabel } from '$lib/promo';
 
   let { product }: { product: Product } = $props();
 
   const cover = $derived(product.images?.[0] ?? null);
   const currency = $derived(product.priceRange?.currency ?? product.currency);
-  const ranged = $derived(!!product.priceRange && product.priceRange.min !== product.priceRange.max);
+  const shown = $derived(cardPrice(product));
   const available = $derived(inStock(product.availability));
   const low = $derived(
     !product.availability.unlimited &&
@@ -27,17 +28,20 @@
         loading="lazy"
       />
     {/if}
-    {#if product.checkout && !available}<span class="tag">{t.soldOut}</span>{/if}
+    {#if product.checkout && !available}<span class="tag">{t.soldOut}</span>
+    {:else if shown.promotion}<span class="tag sale">{t.promoOn}</span>{/if}
   </div>
   <div class="body">
     <h3>{product.name}</h3>
-    <p class="price">
-      {#if product.priceRange}
-        {ranged ? t.from : ''}{money(product.priceRange.min, currency)}
-      {:else if product.price != null}
-        {money(product.price, currency)}
-      {/if}
-    </p>
+    {#if shown.now != null}
+      <p class="price" class:on-sale={shown.was != null}>
+        <span>{shown.ranged ? t.from : ''}{money(shown.now, currency)}</span>
+        {#if shown.was != null}
+          <s class="muted" aria-label={fill(t.promoWas, { price: money(shown.was, currency) })}>{money(shown.was, currency)}</s>
+        {/if}
+      </p>
+    {/if}
+    {#if shown.promotion}<p class="until">{untilLabel(shown.promotion)}</p>{/if}
     <p class="meta">
       {#if !product.checkout}<span class="muted">{t.byQuote}</span>
       {:else if low}<span class="warn">{fill(t.lowStock, { count: product.availability.quantity ?? 0 })}</span>{/if}
@@ -90,9 +94,29 @@
     font-size: 1rem;
     font-weight: 600;
   }
+  .tag.sale {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
   .price {
     margin: 4px 0 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 8px;
+    align-items: baseline;
     font-weight: 700;
+  }
+  .price.on-sale > span {
+    color: var(--accent);
+  }
+  .price s {
+    font-weight: 400;
+    font-size: 0.88rem;
+  }
+  .until {
+    margin: 2px 0 0;
+    font-size: 0.85rem;
+    color: var(--accent);
   }
   .meta {
     margin: 2px 0 0;

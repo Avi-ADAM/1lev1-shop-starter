@@ -66,7 +66,10 @@ describe('arrangedReport', () => {
         ],
         items: [],
         currency: 'ILS',
+        listSubtotal: 390,
         subtotal: 390,
+        promotions: [],
+        hints: [],
         problems: [],
         delivery: []
       },

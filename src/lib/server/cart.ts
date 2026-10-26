@@ -1,4 +1,4 @@
-import type { CartItem, DeliveryOption, Image, PickupPoint, Product } from '$lib/types';
+import type { CartItem, CartQuote, DeliveryOption, Image, PickupPoint, Product } from '$lib/types';
 import {
   activeVariants,
   maxQuantityOf,
@@ -14,6 +14,10 @@ import {
  * change what they asked for but never what it costs. The same function
  * prices the cart page and the checkout, so what the buyer saw is what they
  * are charged.
+ *
+ * Promotions are 1lev1's to price (`POST /cart/quote`): the lines this file
+ * keeps are sent there, and its answer replaces the catalog prices. A 1lev1
+ * that cannot answer leaves the catalog prices — never less than a promotion.
  */
 
 export const MAX_CART_LINES = 50; // POST /orders takes at most 50 lines
@@ -24,9 +28,15 @@ export interface PricedLine {
   name: string;
   optionLabel: string | null;
   image: Image | null;
+  /** The approved price of one unit, before any promotion. */
+  listPrice: number;
+  /** What one unit costs — an average when a bundle or a threshold is shared out. */
   unitPrice: number;
   quantity: number;
+  /** The exact amount due for the line. */
   total: number;
+  /** The promotion that priced it — reported back on the order. */
+  promotionId: string | null;
   minQuantity: number;
   maxQuantity: number;
 }
@@ -37,7 +47,8 @@ export type CartProblem =
   | { kind: 'soldOut'; productId: string; variantId: string | null; name: string }
   | { kind: 'adjusted'; productId: string; variantId: string | null; name: string; quantity: number }
   | { kind: 'currency'; productId: string; name: string }
-  | { kind: 'tooManyLines' };
+  | { kind: 'tooManyLines' }
+  | { kind: 'promotionEnded'; name: string };
 
 export interface DeliveryChoice {
   /** What the buyer picks and the order reports: the rikma's option id, or the kind itself. */
@@ -60,7 +71,12 @@ export interface PricedCart {
   /** The cart after the adjustments — what the browser should keep. */
   items: CartItem[];
   currency: string | null;
+  /** What the lines would cost at the approved prices. */
+  listSubtotal: number;
   subtotal: number;
+  /** The promotions that lowered this cart, and what would lower it more ("2 more for 3 for 100"). */
+  promotions: Array<{ id: string; name: string | null }>;
+  hints: CartQuote['hints'];
   problems: CartProblem[];
   delivery: DeliveryChoice[];
 }
@@ -124,7 +140,8 @@ export function deliveryChoicesOf(products: Product[]): DeliveryChoice[] {
 
 export async function priceCart(
   rawItems: unknown,
-  getProduct: (id: string) => Promise<Product | null>
+  getProduct: (id: string) => Promise<Product | null>,
+  quote?: (lines: Array<{ lineId: string; productId: string; variantId: string | null; quantity: number }>) => Promise<CartQuote | null>
 ): Promise<PricedCart> {
   const problems: CartProblem[] = [];
   let items = normalizeItems(rawItems);
@@ -197,9 +214,11 @@ export async function priceCart(
       name,
       optionLabel: variantLabel(variant),
       image: (variant?.images?.[0] ?? product.images?.[0]) || null,
+      listPrice: unitPrice,
       unitPrice,
       quantity,
       total: round2(unitPrice * quantity),
+      promotionId: null,
       minQuantity: min,
       maxQuantity: max
     });
@@ -207,12 +226,89 @@ export async function priceCart(
     sold.push(product);
   }
 
+  const listSubtotal = round2(lines.reduce((s, l) => s + l.total, 0));
+  let promoted: ReturnType<typeof applyQuote> = null;
+  if (quote && lines.length) {
+    try {
+      promoted = applyQuote(lines, await quote(lines.map((l, i) => ({ lineId: String(i), productId: l.productId, variantId: l.variantId, quantity: l.quantity }))));
+    } catch (e) {
+      // The catalog prices stand: never less than a promotion would charge.
+      console.error('[shop] the cart could not be quoted under promotions:', e);
+    }
+  }
+  const priced = promoted?.lines ?? lines;
+
   return {
-    lines,
+    lines: priced,
     items: kept,
     currency,
-    subtotal: round2(lines.reduce((s, l) => s + l.total, 0)),
+    listSubtotal,
+    subtotal: round2(priced.reduce((s, l) => s + l.total, 0)),
+    promotions: promoted?.promotions ?? [],
+    hints: promoted?.hints ?? [],
     problems,
     delivery: deliveryChoicesOf(sold)
   };
+}
+
+/**
+ * 1lev1's answer over the lines this shop priced. Any disagreement about what
+ * is in the cart (a line missing, another quantity) ⇒ null, and the catalog
+ * prices stand.
+ */
+export function applyQuote(
+  lines: PricedLine[],
+  q: CartQuote | null
+): { lines: PricedLine[]; promotions: PricedCart['promotions']; hints: CartQuote['hints'] } | null {
+  if (!q || !Array.isArray(q.lines) || q.lines.length !== lines.length) return null;
+  const byId = new Map(q.lines.map((l) => [String(l.lineId), l]));
+  const out: PricedLine[] = [];
+  for (const [i, line] of lines.entries()) {
+    const ql = byId.get(String(i));
+    if (!ql || ql.quantity !== line.quantity || ql.productId !== line.productId || !(ql.lineTotal >= 0)) return null;
+    // A promotion only ever lowers a line; anything else is not ours to charge.
+    const total = Math.min(line.total, round2(ql.lineTotal));
+    out.push({
+      ...line,
+      listPrice: ql.listPrice ?? line.listPrice,
+      unitPrice: Math.round((total / line.quantity) * 10000) / 10000,
+      total,
+      promotionId: total < line.total ? (ql.promotionId ?? null) : null
+    });
+  }
+  const names = new Map((q.applied ?? []).map((a) => [String(a.promotionId), a.name ?? null]));
+  const ids = [...new Set(out.map((l) => l.promotionId).filter((id): id is string => !!id))];
+  return { lines: out, promotions: ids.map((id) => ({ id, name: names.get(id) ?? null })), hints: Array.isArray(q.hints) ? q.hints : [] };
+}
+
+/**
+ * The promotions the buyer saw that no longer price the cart — "the
+ * promotion ended" instead of a bare "something changed".
+ */
+export function endedPromotions(priced: PricedCart, seen: unknown): CartProblem[] {
+  if (!Array.isArray(seen)) return [];
+  const now = new Set(priced.promotions.map((p) => p.id));
+  return seen
+    .map((p: any) => ({ id: String(p?.id ?? ''), name: typeof p?.name === 'string' ? p.name.slice(0, 80) : '' }))
+    .filter((p) => p.id && !now.has(p.id))
+    .map((p) => ({ kind: 'promotionEnded' as const, name: p.name }));
+}
+
+/**
+ * The lines as a payment page charges them: a unit price in whole cents.
+ * A line whose exact total does not split evenly into its units becomes two —
+ * the units at the lower cent, and one unit carrying the remainder — so the
+ * charge is the quoted total to the cent.
+ */
+export function chargeLines(lines: PricedLine[]): PricedLine[] {
+  return lines.flatMap((l) => {
+    const cents = Math.round((Number.isFinite(l.total) ? l.total : l.unitPrice * l.quantity) * 100);
+    if (cents % l.quantity === 0) return [{ ...l, unitPrice: cents / l.quantity / 100 }];
+    const low = Math.floor(cents / l.quantity);
+    const rest = cents - low * (l.quantity - 1);
+    return [
+      { ...l, quantity: l.quantity - 1, unitPrice: low / 100, total: round2((low * (l.quantity - 1)) / 100) },
+      { ...l, quantity: 1, unitPrice: rest / 100, total: rest / 100 }
+    ];
+  });
 }

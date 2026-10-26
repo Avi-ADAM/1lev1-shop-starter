@@ -68,6 +68,25 @@ const he = {
   cartEmpty: 'העגלה ריקה.',
   remove: 'הסרה',
   subtotal: 'סכום ביניים',
+  promoSaved: 'חיסכון במבצע',
+  promoHintBundle: 'עוד {{count}} ותקבלו {{qty}} ב-{{price}}',
+  promoHintThreshold: 'עוד {{amount}} ותקבלו הנחה',
+  promotionEndedPlain: 'מבצע הסתיים — המחירים בעגלה עודכנו.',
+  // Promotions — priced by 1lev1, under what the rikma agreed to
+  promoOn: 'מבצע',
+  promoUntil: 'המבצע עד {{date}}',
+  promoWas: 'במקום {{price}}',
+  promoBanner: 'מבצעים עכשיו',
+  promoPct: '{{pct}}% הנחה',
+  promoPctAll: '{{pct}}% הנחה על הכל',
+  promoFixed: 'במחיר {{price}}',
+  promoOff: '{{amount}} הנחה ליחידה',
+  promoBundle: '{{qty}} ב-{{price}} — מערבבים',
+  promoBxgyFree: '{{buy}}+{{get}}',
+  promoSecondPct: 'השני ב-{{pct}}% הנחה',
+  promoBxgyPct: 'קנו {{buy}}, ועוד {{get}} ב-{{pct}}% הנחה',
+  promoOverOff: 'מעל {{min}} — {{amount}} הנחה',
+  promoOverPct: 'מעל {{min}} — {{pct}}% הנחה',
   deliveryFee: 'משלוח',
   total: 'סה״כ לתשלום',
   note: 'הערה להזמנה',
@@ -105,7 +124,8 @@ const he = {
     soldOut: '"{{name}}" אזל מהמלאי, והוסר.',
     adjusted: 'הכמות של "{{name}}" עודכנה ל־{{count}}.',
     currency: '"{{name}}" מתומחר במטבע אחר — אפשר לקנות אותו בהזמנה נפרדת.',
-    tooManyLines: 'יש יותר מדי שורות בעגלה — חלק נשאר בחוץ.'
+    tooManyLines: 'יש יותר מדי שורות בעגלה — חלק נשאר בחוץ.',
+    promotionEnded: 'המבצע "{{name}}" הסתיים — המחירים בעגלה עודכנו.'
   } as Record<string, string>,
   orderTitle: 'ההזמנה התקבלה',
   orderNumber: 'מספר הזמנה: {{number}}',
@@ -190,6 +210,24 @@ const en: Texts = {
   cartEmpty: 'Your cart is empty.',
   remove: 'Remove',
   subtotal: 'Subtotal',
+  promoSaved: 'Promotion savings',
+  promoHintBundle: '{{count}} more and you get {{qty}} for {{price}}',
+  promoHintThreshold: '{{amount}} more for a discount',
+  promotionEndedPlain: 'A promotion ended — the prices in your cart are updated.',
+  promoOn: 'Sale',
+  promoUntil: 'Sale until {{date}}',
+  promoWas: 'was {{price}}',
+  promoBanner: 'On sale now',
+  promoPct: '{{pct}}% off',
+  promoPctAll: '{{pct}}% off everything',
+  promoFixed: 'Now {{price}}',
+  promoOff: '{{amount}} off each',
+  promoBundle: '{{qty}} for {{price}} — mix and match',
+  promoBxgyFree: 'Buy {{buy}}, get {{get}} free',
+  promoSecondPct: 'Second one {{pct}}% off',
+  promoBxgyPct: 'Buy {{buy}}, get {{get}} more {{pct}}% off',
+  promoOverOff: '{{amount}} off over {{min}}',
+  promoOverPct: '{{pct}}% off over {{min}}',
   deliveryFee: 'Shipping',
   total: 'Total',
   note: 'Order note',
@@ -227,7 +265,8 @@ const en: Texts = {
     soldOut: '"{{name}}" is sold out and was removed.',
     adjusted: 'The quantity of "{{name}}" was changed to {{count}}.',
     currency: '"{{name}}" is priced in another currency — order it separately.',
-    tooManyLines: 'Your cart has too many lines — some were left out.'
+    tooManyLines: 'Your cart has too many lines — some were left out.',
+    promotionEnded: 'The "{{name}}" promotion ended — the prices in your cart are updated.'
   },
   orderTitle: 'Order received',
   orderNumber: 'Order number: {{number}}',
@@ -253,6 +292,16 @@ const ALL = { he, en } as const;
 export const LANG: keyof typeof ALL = 'he';
 
 export const t: Texts = ALL[LANG];
+
+/** The shop's clock for dates a buyer reads — fixed, so the server and the browser print the same day. */
+export const TIME_ZONE = 'Asia/Jerusalem';
+
+/** `14.11` — a promotion's last day. */
+export function shortDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat(LANG === 'he' ? 'he-IL' : 'en', { day: 'numeric', month: 'numeric', timeZone: TIME_ZONE }).format(d);
+}
 
 /** `fill('נותרו {{count}}', { count: 3 })` ⇒ `נותרו 3`. */
 export function fill(template: string, vars: Record<string, string | number>): string {

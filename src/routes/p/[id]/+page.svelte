@@ -12,6 +12,7 @@
     valueState,
     type Selection
   } from '$lib/variants';
+  import { cardPrice, chosenPrice, untilLabel } from '$lib/promo';
 
   let { data } = $props();
   const product = $derived(data.product);
@@ -33,6 +34,11 @@
   });
 
   const shown = $derived(shownOf(product, selection));
+  // The chosen variant's price (under a promotion when one runs); before a choice, the card's "from".
+  const sale = $derived(
+    (shown.price != null ? chosenPrice(product, shown.variant) : null) ??
+      (product.priceRange ? cardPrice(product) : { now: null, was: null, ranged: false, promotion: null })
+  );
   const currency = $derived(product.priceRange?.currency ?? product.currency);
   const available = $derived(inStock(shown.availability));
   const max = $derived(maxQuantityOf(product, shown.availability));
@@ -102,15 +108,16 @@
   <section class="info">
     <h1>{product.name}</h1>
 
-    <p class="price">
-      {#if shown.price != null}
-        <strong>{money(shown.price, currency)}</strong>
-        {#if shown.compareAtPrice && shown.compareAtPrice > (shown.price ?? 0)}
+    <p class="price" class:on-sale={sale.was != null}>
+      {#if sale.now != null}
+        <strong>{sale.ranged ? t.from : ''}{money(sale.now, currency)}</strong>
+        {#if sale.was != null}
+          <s class="muted" aria-label={fill(t.promoWas, { price: money(sale.was, currency) })}>{money(sale.was, currency)}</s>
+        {:else if !sale.ranged && shown.compareAtPrice && shown.compareAtPrice > sale.now}
           <s class="muted">{money(shown.compareAtPrice, currency)}</s>
         {/if}
-      {:else if product.priceRange}
-        <strong>{t.from}{money(product.priceRange.min, currency)}</strong>
       {/if}
+      {#if sale.promotion}<span class="until">{untilLabel(sale.promotion)}</span>{/if}
       {#if product.unit}<span class="muted">{fill(t.unit, { unit: product.unit })}</span>{/if}
     </p>
 
@@ -289,6 +296,10 @@
   }
   .price span {
     font-size: 0.9rem;
+  }
+  .price.on-sale strong,
+  .price .until {
+    color: var(--accent);
   }
   .axis {
     border: 0;
