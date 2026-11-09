@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { invalidateAll } from '$app/navigation';
   import { cart } from '$lib/cart.svelte';
   import { fill, money, t } from '$lib/texts';
@@ -27,8 +27,10 @@
     return () => clearInterval(timer);
   });
 
+  // `clear` reads the cart as it saves it; untracked, so this runs once per
+  // `paid` and does not re-run on the change it makes itself.
   $effect(() => {
-    if (paid) cart.clear();
+    if (paid) untrack(() => cart.clear());
   });
 </script>
 
